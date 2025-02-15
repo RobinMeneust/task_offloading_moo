@@ -1,9 +1,14 @@
 # based on https://www.kaggle.com/datasets/sachin26240/vehicularfogcomputing
+# distance: https://ecssria.eu/assets/images/table_latency.png
+from idlelib.pyparse import trans
+
 import numpy as np
 
 
 class Dataset:
     def __init__(self, num_cloud_machines, num_fog_machines, num_tasks, values_domains=None):
+        self._propagation_speed = 3e8/1.44  # m/s (https://www.rp-photonics.com/fibers.html)
+
         if values_domains is None:
             values_domains = {
                 "cloud_machine": {
@@ -12,6 +17,9 @@ class Dataset:
                     "ram_usage_cost": [0.02/3600, 0.05/3600],  # €/GB/s
                     "bandwidth_usage_cost": [0.05, 0.1],  # €/GB
                     "latency": [0.01, 3],  # s
+                    "distance_edge": [1e4, 1e6],  # m
+                    "bandwidth": [10, 400],  # GB/s
+                    "ram_limit": [64, 512],  # GB
                 },
                 "fog_machine": {
                     "cpu_rate": [500, 1500],  # MIPS (1e6)
@@ -19,9 +27,12 @@ class Dataset:
                     "ram_usage_cost": [0.01/3600, 0.03/3600],  # €/GB/s
                     "bandwidth_usage_cost": [0.01, 0.02],  # €/GB
                     "latency": [0.005, 0.01],  # s
+                    "distance_edge": [1e2, 5e4],  # m
+                    "bandwidth": [0.05, 10],  # GB/s
+                    "ram_limit": [8, 32],  # GB
                 },
                 "task": {
-                    "num_instructions": [1000, 1000],  # millions (1e6) of instructions
+                    "num_instructions": [1000, 1000],  # millions of instructions (1e6)
                     "ram_required": [0.05, 0.2],  # GB
                     "in_traffic": [0.01, 0.1],  # GB
                     "out_traffic": [0.01, 0.1],  # GB
@@ -38,17 +49,22 @@ class Dataset:
         # pre-compute objective values
         self._run_time_matrix, self._cost_matrix = self._compute_run_time_cost_matrices()
 
+    def _compute_latency(self, distance, data_quantity, bandwidth):
+        propagation_time = 2 * (distance / self._propagation_speed) # *2 because it goes and comes back
+        transfer_time = data_quantity / bandwidth # data_quantity = in & out
+
+        return propagation_time + transfer_time
+
     @staticmethod
     def _compute_execution_time(task, machine):
         return task["num_instructions"] / machine["cpu_rate"]
 
     @staticmethod
     def _compute_cost(task, machine, exec_time):
-        return (machine["cpu_usage_cost"] + machine["ram_usage_cost"] * task["ram_required"]) * exec_time
+        return (machine["cpu_usage_cost"] + machine["ram_usage_cost"] * task["ram_required"]) * exec_time + machine["bandwidth_usage_cost"] * (task["in_traffic"] + task["out_traffic"])
 
-    @staticmethod
-    def _compute_total_time(machine, exec_time):
-        return exec_time + machine["latency"]
+    def _compute_total_time(self, task, machine, exec_time):
+        return exec_time + self._compute_latency(machine["distance_edge"], task["in_traffic"] + task["out_traffic"], machine["bandwidth"])
 
     def _compute_run_time_cost_matrices(self):
         run_time_matrix = np.zeros((self.get_num_tasks(), self.get_num_machines()))
@@ -58,7 +74,7 @@ class Dataset:
             for j, machine in enumerate(self.get_machines()):
                 exec_time = self._compute_execution_time(task, machine)  # used for the 2 objectives
                 cost_matrix[i, j] = self._compute_cost(task, machine, exec_time)
-                run_time_matrix[i, j] = self._compute_total_time(machine, exec_time)
+                run_time_matrix[i, j] = self._compute_total_time(task, machine, exec_time)
 
         return run_time_matrix, cost_matrix
 
