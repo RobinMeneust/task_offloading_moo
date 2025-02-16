@@ -1,3 +1,10 @@
+Metadata-Version: 2.2
+Name: task_offloading_moo
+Version: 0.0.1
+Summary: Task offloading multi-objective optimization
+Author: Maxime Cabrit, Antoine Charlet, Robin Meneust, Ethan Pinto
+Description-Content-Type: text/markdown
+
 # moo_project
 
 ## Install

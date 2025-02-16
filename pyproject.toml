@@ -1,0 +1,12 @@
+[project]
+dynamic = ["dependencies"]
+name = "task_offloading_moo"
+version = "0.0.1"
+authors = [
+  {name = "Maxime Cabrit"},
+  {name = "Antoine Charlet"},
+  {name = "Robin Meneust"},
+  {name = "Ethan Pinto"},
+]
+description = "Task offloading multi-objective optimization"
+readme = "README.md"
