@@ -10,3 +10,24 @@ authors = [
 ]
 description = "Task offloading multi-objective optimization"
 readme = "README.md"
+
+[tool.black]
+line-length = 120
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | venv
+  | build
+  | dist
+  | conf
+)/
+'''
+
+[tool.poetry]
+
+packages = [{ include = "tasks_offloading_moo" }]
+
+include = [
+    "tasks_offloading_moo/data/config/*.json"
+]

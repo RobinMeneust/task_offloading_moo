@@ -1,0 +1,20 @@
+{
+  "cloud": {
+    "cpu_rate": [3000, 5000],
+    "cpu_usage_cost": [0.1000, 0.7960],
+    "ram_usage_cost": [5.55e-6, 1.38e-5],
+    "bandwidth_usage_cost": [0.05, 0.1],
+    "distance_edge": [1e4, 1e6],
+    "bandwidth": [10, 400],
+    "ram_limit": [3.75, 30]
+  },
+  "fog": {
+    "cpu_rate": [500, 1500],
+    "cpu_usage_cost": [0.0209, 0.1670],
+    "ram_usage_cost": [2.77e-6, 8.33e-6],
+    "bandwidth_usage_cost": [0.01, 0.02],
+    "distance_edge": [1e2, 5e4],
+    "bandwidth": [0.05, 10],
+    "ram_limit": [2, 16]
+  }
+}

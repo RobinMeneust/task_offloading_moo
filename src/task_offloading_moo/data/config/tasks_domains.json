@@ -1,0 +1,9 @@
+{
+  "num_instructions": [1000, 5000],
+  "ram_required": [0.05, 0.2],
+  "in_traffic": [0.01, 0.1],
+  "out_traffic": [0.01, 0.1],
+  "parallelization_ratio": [0, 1]
+}
+
+
