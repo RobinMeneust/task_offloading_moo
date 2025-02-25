@@ -174,9 +174,10 @@ class Dataset:
         individual = individual.astype(int)
         for task_idx in range(len(individual)):
             # if out of bounds
-            if individual[task_idx] < 0 or individual[task_idx] >= len(self.get_machines()):
-                raise IndexError("machine_idx out of bounds")
-
+            if individual[task_idx] < 0:
+                individual[task_idx] = 0
+            elif individual[task_idx] >= len(self.get_machines()):
+                individual[task_idx] = len(self.get_machines()) - 1
             if not self._is_ram_enough(task_idx, individual[task_idx]):
                 individual[task_idx] = self.get_random_valid_machine(task_idx)
         return individual
