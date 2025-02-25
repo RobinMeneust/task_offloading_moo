@@ -204,7 +204,7 @@ class PumaOptimizer(Algorithm):
 
         # TODO: Note that this section is unclear in the paper,
         #  and seems to be different in their code, so we should check it again
-        if male_puma.F < self.male_puma.F:
+        if PumaOptimizer._dominates(male_puma.F, self.male_puma.F):
             # update the best solution
             self.male_puma = male_puma
 
@@ -242,13 +242,17 @@ class PumaOptimizer(Algorithm):
                 ord=1,
             )
 
-            if seq_cost_explor[i] != 0 and (self.lc is None or seq_cost_explor[i] < self.lc):
-                self.lc = seq_cost_explor[i]
-            if seq_cost_exploit[i] != 0 and (self.lc is None or seq_cost_exploit[i] < self.lc):
-                self.lc = seq_cost_exploit[i]
+            # TODO: maybe try to use ranks instead of objectives norm
+            seq_cost_explor_norm = np.linalg.norm(seq_cost_explor[i], ord=1)
+            seq_cost_exploit_norm = np.linalg.norm(seq_cost_exploit[i], ord=1)
 
-        f1_explor = seq_cost_explor[0]
-        f1_exploit = seq_cost_exploit[0]
+            if seq_cost_explor_norm != 0 and (self.lc is None or seq_cost_explor_norm < self.lc):
+                self.lc = seq_cost_explor_norm
+            if seq_cost_explor_norm != 0 and (self.lc is None or seq_cost_exploit_norm < self.lc):
+                self.lc = seq_cost_exploit_norm
+
+        f1_explor = np.linalg.norm(seq_cost_explor[0], ord=1)
+        f1_exploit = np.linalg.norm(seq_cost_exploit[0], ord=1)
 
         f2_explor = np.sum(seq_cost_explor)
         f2_exploit = np.sum(seq_cost_exploit)
@@ -263,11 +267,12 @@ class PumaOptimizer(Algorithm):
         seq_cost_explor = np.empty(3)
         seq_cost_exploit = np.empty(3)
         for i in range(len(seq_cost_explor)):
-            seq_cost_explor[i] = abs(
-                self.best_four_pumas_scores_history_explor[i] - self.best_four_pumas_scores_history_explor[i + 1]
+            seq_cost_explor[i] = np.linalg.norm(
+                self.best_four_pumas_scores_history_explor[i] - self.best_four_pumas_scores_history_explor[i + 1], ord=1
             )
-            seq_cost_exploit[i] = abs(
-                self.best_four_pumas_scores_history_exploit[i] - self.best_four_pumas_scores_history_exploit[i + 1]
+            seq_cost_exploit[i] = np.linalg.norm(
+                self.best_four_pumas_scores_history_exploit[i] - self.best_four_pumas_scores_history_exploit[i + 1],
+                ord=1,
             )
 
         # f1 (escalation)
@@ -299,6 +304,15 @@ class PumaOptimizer(Algorithm):
         delta_exploit = 1 - self.alpha_exploit
 
         # Update lc
+        if seq_cost_explor[-1] != 0 and (self.lc is None or seq_cost_explor[-1] < self.lc):
+            self.lc = seq_cost_explor[-1]
+        if seq_cost_exploit[-1] != 0 and (self.lc is None or seq_cost_exploit[-1] < self.lc):
+            self.lc = seq_cost_exploit[-1]
+
+        # TODO: maybe try to use ranks instead of objectives norm
+        # seq_cost_explor_norm = np.linalg.norm(seq_cost_explor[-1], ord=1)
+        # seq_cost_exploit_norm = np.linalg.norm(seq_cost_exploit[-1], ord=1)
+
         if seq_cost_explor[-1] != 0 and (self.lc is None or seq_cost_explor[-1] < self.lc):
             self.lc = seq_cost_explor[-1]
         if seq_cost_exploit[-1] != 0 and (self.lc is None or seq_cost_exploit[-1] < self.lc):
