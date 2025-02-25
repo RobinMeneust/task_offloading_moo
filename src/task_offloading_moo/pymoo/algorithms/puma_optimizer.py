@@ -2,7 +2,6 @@ import numpy as np
 from pymoo.algorithms.soo.nonconvex.ga import FitnessSurvival
 from pymoo.core.initialization import Initialization
 from pymoo.core.population import Population
-
 from pymoo.core.algorithm import Algorithm
 from pymoo.util.display.multi import MultiObjectiveOutput
 from pymoo.core.repair import NoRepair
@@ -157,8 +156,8 @@ class PumaOptimizer(Algorithm):
         initial_best = FitnessSurvival().do(self.problem, current_pop, n_survive=1)[0].F
 
         for i in range(3):
-            self.num_unselected_iters_between_best_four_explor[i] = 0
-            self.num_unselected_iters_between_best_four_exploit[i] = 0
+            self.num_unselected_iters_between_best_four_explor[i] = 1
+            self.num_unselected_iters_between_best_four_exploit[i] = 1
 
         self.best_four_pumas_scores_history_explor[0] = initial_best
         self.best_four_pumas_scores_history_exploit[0] = initial_best
@@ -197,8 +196,24 @@ class PumaOptimizer(Algorithm):
         if self.exploration_score > self.exploitation_score:
             is_explor = True
             self.run_exploration(self.pop)
+
+            # update history
+            self.num_unselected_iters_between_best_four_explor = np.roll(
+                self.num_unselected_iters_between_best_four_explor, -1
+            )
+            self.num_unselected_iters_between_best_four_explor[-1] = 1
+
+            self.num_unselected_iters_between_best_four_exploit[-1] += 1
         else:
             self.run_exploitation(self.pop)
+
+            # update history
+            self.num_unselected_iters_between_best_four_exploit = np.roll(
+                self.num_unselected_iters_between_best_four_exploit, -1
+            )
+            self.num_unselected_iters_between_best_four_exploit[-1] = 1
+
+            self.num_unselected_iters_between_best_four_explor[-1] += 1
 
         male_puma = FitnessSurvival().do(self.problem, self.pop, n_survive=1)[0]
 
@@ -212,21 +227,9 @@ class PumaOptimizer(Algorithm):
             if is_explor:
                 self.best_four_pumas_scores_history_explor = np.roll(self.best_four_pumas_scores_history_explor, -1)
                 self.best_four_pumas_scores_history_explor[-1] = male_puma.F
-                self.num_unselected_iters_between_best_four_explor = np.roll(
-                    self.num_unselected_iters_between_best_four_explor, -1
-                )
-                self.num_unselected_iters_between_best_four_explor[-1] = 0
-
-                self.num_unselected_iters_between_best_four_exploit[-1] += 1
             else:
                 self.best_four_pumas_scores_history_exploit = np.roll(self.best_four_pumas_scores_history_exploit, -1)
                 self.best_four_pumas_scores_history_exploit[-1] = male_puma.F
-                self.num_unselected_iters_between_best_four_exploit = np.roll(
-                    self.num_unselected_iters_between_best_four_exploit, -1
-                )
-                self.num_unselected_iters_between_best_four_exploit[-1] = 0
-
-                self.num_unselected_iters_between_best_four_explor[-1] += 1
         else:
             self.num_unselected_iters_between_best_four_explor[-1] += 1
             self.num_unselected_iters_between_best_four_exploit[-1] += 1
@@ -235,7 +238,7 @@ class PumaOptimizer(Algorithm):
         self.update_scores_experienced(is_explor)
 
     def update_scores_unexperienced(self):
-        # TODO: We can also try to use either the rank or the objectives as they are as the cost
+        # TODO: We can try to use either the rank or the objectives as they are for the cost
 
         seq_cost_explor = np.empty(3)
         seq_cost_exploit = np.empty(3)
@@ -320,7 +323,51 @@ class PumaOptimizer(Algorithm):
         )
 
     def run_exploration(self, current_pop):
-        pass
+        p = (1 - self.u_prob) / (len(current_pop))
+
+        for i in range(len(current_pop)):
+            xi = current_pop[i]
+
+            if np.random.rand() < 0.5:
+                # create a completely random solution zi
+                zi = self.initialization.do(self.problem, 1, algorithm=self)[0]
+            else:
+                # select 6 random distinct solutions (different from xi) to build zi
+                # create a solution between pumas
+                g = np.random.rand() * 2 - 1  # in [-1,1]
+
+                xa, xb, xc, xd, xe, xf = np.random.choice(len(current_pop), 6, replace=False)
+                vec_ba = current_pop[xa].X - current_pop[xb].X
+                vec_dc = current_pop[xc].X - current_pop[xd].X
+                vec_fe = current_pop[xe].X - current_pop[xf].X
+
+                zi = xi.copy()
+
+                # TODO: remove vec_dc here, it was just kept for now to have the same formula has the paper
+                zi.X = xa.X + g * (vec_ba + vec_ba - vec_dc + vec_dc - vec_fe)
+
+                # repair the solution
+                zi = self.repair(self.problem, zi)
+
+                # kind of crossover between xi and zi
+
+                j0 = np.random.randint(0, len(xi.X))  # xj0 will become zj0
+
+                for j in range(len(xi.X)):
+                    if j != j0 or np.random.rand() >= self.u_prob:
+                        # keep initial value
+                        zi.X[j] = xi.X[j]
+
+                # evaluate the new solution
+                zi.F = self.problem.evaluate(zi)
+
+                # update u probability
+                if zi.F < xi.F:
+                    current_pop[i] = zi
+                else:
+                    self.u_prob += p
+
+        return current_pop
 
     def run_exploitation(self, current_pop):
         pass
