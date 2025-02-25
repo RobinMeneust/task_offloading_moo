@@ -65,6 +65,9 @@ class PumaOptimizer(Algorithm):
 
         super().__init__(output=output, termination=get_termination("n_gen", n_max_iters - 3), **kwargs)
 
+        self.current_iter = 0
+        self.n_max_iters = n_max_iters
+
         self.initialization = Initialization(sampling)
 
         self.pop_size = pop_size
@@ -111,8 +114,10 @@ class PumaOptimizer(Algorithm):
         # if self.is_unexperienced:
         #     self.unexperienced_phase()
         #     self.is_unexperienced = False
+        #     self.current_iter += 3
         # else:
         #     self.experience_phase()
+        #     self.current_iter += 1
         #
         #
         #
@@ -330,6 +335,7 @@ class PumaOptimizer(Algorithm):
 
             if np.random.rand() < 0.5:
                 # create a completely random solution zi
+                # repair is normally already included in the sampling
                 zi = self.initialization.do(self.problem, 1, algorithm=self)[0]
             else:
                 # select 6 random distinct solutions (different from xi) to build zi
@@ -349,25 +355,71 @@ class PumaOptimizer(Algorithm):
                 # repair the solution
                 zi = self.repair(self.problem, zi)
 
-                # kind of crossover between xi and zi
+            # kind of crossover between xi and zi
+            j0 = np.random.randint(0, len(xi.X))  # xj0 will become zj0
 
-                j0 = np.random.randint(0, len(xi.X))  # xj0 will become zj0
+            for j in range(len(xi.X)):
+                if j != j0 or np.random.rand() >= self.u_prob:
+                    # keep initial value
+                    zi.X[j] = xi.X[j]
 
-                for j in range(len(xi.X)):
-                    if j != j0 or np.random.rand() >= self.u_prob:
-                        # keep initial value
-                        zi.X[j] = xi.X[j]
+            # evaluate the new solution
+            zi.F = self.problem.evaluate(zi)
 
-                # evaluate the new solution
-                zi.F = self.problem.evaluate(zi)
-
-                # update u probability
-                if zi.F < xi.F:
-                    current_pop[i] = zi
-                else:
-                    self.u_prob += p
+            # update u probability
+            if zi.F < xi.F:
+                current_pop[i] = zi
+            else:
+                self.u_prob += p
 
         return current_pop
 
     def run_exploitation(self, current_pop):
-        pass
+        dim = len(current_pop[0].X)
+        for i in range(len(current_pop)):
+            xi = current_pop[i]
+            if np.random.rand() < 0.5:
+                # Ambush strategy
+                if np.random.rand() < self.l_prob:
+                    # Small jump towards 2 other pumas
+                    random_puma = self.initialization.do(self.problem, 1, algorithm=self)[0]
+                    random_puma_scaled = random_puma * 2 * np.random.rand() * np.exp(np.random.randn(1, dim))
+
+                    zi = xi.copy()
+                    zi.X = self.male_puma + random_puma_scaled - xi
+                else:
+                    # Long jump towards the best puma
+                    factor = 2 * np.random.rand()
+                    denominator = 2 * np.random.rand() - 1 + np.random.randn(1, dim)
+
+                    r = 2 * np.random.rand() - 1
+                    f1 = np.random.randn(1, dim) * np.exp(2 - (self.current_iter / self.n_max_iters))
+                    w = np.random.randn(1, dim)
+                    v = np.random.randn(1, dim)
+                    f2 = w * (v**2) * np.cos(2 * np.random.rand() * w)
+
+                    scaled_xi = f1 * r * xi
+                    scaled_puma_male = f2 * (1 - r) * self.male_puma
+
+                    zi = xi.copy()
+                    zi.X = (factor * (scaled_xi + scaled_puma_male) / denominator) - self.male_puma
+            else:
+                # Run strategy
+                mean_puma = np.mean(current_pop.X, axis=0) / len(current_pop)
+                random_puma = self.initialization.do(self.problem, 1, algorithm=self)[0]
+                beta = np.random.randint(0, 2)  # 0 or 1
+                denominator = 1 + np.random.rand() * self.alpha  # scale
+
+                zi = xi.copy()
+                zi.X = (np.multiply(random_puma.X, mean_puma) - (1**beta) * xi) / denominator  # element wise product
+
+            # repair the solution
+            zi = self.repair(self.problem, zi)
+
+            # evaluate the new solution
+            zi.F = self.problem.evaluate(zi)
+
+            if zi.F < xi.F:
+                current_pop[i] = zi
+
+        return current_pop
