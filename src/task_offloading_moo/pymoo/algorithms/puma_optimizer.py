@@ -1,3 +1,4 @@
+from pymoo.util.archive import default_archive  # MultiObjectiveArchive
 import copy
 import numpy as np
 from pymoo.operators.survival.rank_and_crowding import RankAndCrowding
@@ -38,6 +39,8 @@ class PumaOptimizer(Algorithm):
         repair=NoRepair(),
         output=PumaOutput(),
         num_objectives=2,
+        archive_size=25,
+        use_archive=True,
         **kwargs
     ):
         """Initializes PUMA optimizer.
@@ -61,6 +64,8 @@ class PumaOptimizer(Algorithm):
             repair (Repair): Repair method. Defaults to NoRepair.
             output (Output): Output method. Defaults to PumaOutput.
             num_objectives (int): Number of objectives. Defaults to 2.
+            archive_size (int): Size of the archive. If None, then no limit is set. Defaults to 25.
+            use_archive (bool): Whether to use the archive or not. Defaults to True.
         """
 
         if n_max_iters < 3:
@@ -104,12 +109,19 @@ class PumaOptimizer(Algorithm):
 
         self.lc = None
 
+        self.archive_size = archive_size
+        self._use_archive = use_archive
+
     def _setup(self, problem, **kwargs):
-        pass
+        if self._use_archive:
+            # self.archive = MultiObjectiveArchive(max_size=archive_size, truncate_size=None)
+            self.archive = default_archive(self.problem, max_size=self.archive_size)
 
     def _initialize_infill(self):
         init_pop = self.initialization.do(self.problem, self.pop_size, algorithm=self)
         self.male_puma = RankAndCrowding().do(self.problem, init_pop, n_survive=1)[0]
+        # if self._use_archive:
+        #     self._update_archive(init_pop)
         return init_pop
 
     def _initialize_advance(self, infills=None, **kwargs):
@@ -123,6 +135,9 @@ class PumaOptimizer(Algorithm):
         else:
             next_pop = self.experience_phase()
             self.current_iter += 1
+        # if self._use_archive:
+        #     self._update_archive(next_pop)
+
         return next_pop
 
     def _advance(self, infills=None, **kwargs):
@@ -430,3 +445,16 @@ class PumaOptimizer(Algorithm):
                 new_pop[i] = zi
 
         return new_pop
+
+    # def _update_archive(self, pop):
+    #     # Merge the archive and current population
+    #     merged = Population.merge(self.archive, pop)
+    #
+    #     num_selected = self.archive_size if self.archive_size is not None else len(merged)
+    #     new_archive = RankAndCrowding().do(self.problem, merged, n_survive=num_selected)
+    #
+    #     # Remove dominated solutions
+    #     nds_indices = np.unique(new_archive.get("rank"), return_index=True)[1]
+    #     new_archive = new_archive[nds_indices]
+    #
+    #     self.archive = new_archive
