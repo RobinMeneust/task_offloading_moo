@@ -9,19 +9,24 @@ from pymoo.util.display.multi import MultiObjectiveOutput
 from pymoo.core.repair import NoRepair
 from pymoo.operators.sampling.lhs import LHS
 from pymoo.termination import get_termination
+from pymoo.util.display.column import Column
 
 
 class PumaOutput(MultiObjectiveOutput):
 
     def __init__(self):
         super().__init__()
-
-        # TODO: If no fields are added here, remove this class and use MultiObjectiveOutput directly
+        self.explor = Column("explor", width=13)
+        self.exploit = Column("exploit", width=13)
+        self.is_explore = Column("is_explore", width=13)
+        self.columns += [self.explor, self.exploit, self.is_explore]
 
     def update(self, algorithm):
         super().update(algorithm)
 
-        # TODO: Add instructions here or remove this method
+        self.explor.set(algorithm.exploration_score)
+        self.exploit.set(algorithm.exploitation_score)
+        self.is_explore.set("yes" if algorithm.exploration_score > algorithm.exploitation_score else "no")
 
 
 class PumaOptimizer(Algorithm):
@@ -177,7 +182,7 @@ class PumaOptimizer(Algorithm):
 
             # update history (for scores computation)
             self.best_four_pumas_scores_history_explor[i] = male_puma_explor.F
-            self.best_four_pumas_scores_history_explor[i] = male_puma_exploit.F
+            self.best_four_pumas_scores_history_exploit[i] = male_puma_exploit.F
 
         new_pop = Population.merge(*new_pop)
 
@@ -196,6 +201,11 @@ class PumaOptimizer(Algorithm):
         if self.exploration_score > self.exploitation_score:
             is_explor = True
             new_pop = self.run_exploration(self.pop)
+            male_puma = RankAndCrowding().do(self.problem, new_pop, n_survive=1)[0]
+
+            if PumaOptimizer._dominates(male_puma.F, self.male_puma.F):
+                # TODO: Use domination ?
+                self.male_puma = male_puma
 
             # update history
             self.num_unselected_iters_between_best_four_explor = np.roll(
@@ -204,8 +214,16 @@ class PumaOptimizer(Algorithm):
             self.num_unselected_iters_between_best_four_explor[-1] = 1
 
             self.num_unselected_iters_between_best_four_exploit[-1] += 1
+
+            self.best_four_pumas_scores_history_explor = np.roll(self.best_four_pumas_scores_history_explor, -1, axis=0)
+            self.best_four_pumas_scores_history_explor[-1] = self.male_puma.F
         else:
             new_pop = self.run_exploitation(self.pop)
+            male_puma = RankAndCrowding().do(self.problem, new_pop, n_survive=1)[0]
+
+            if PumaOptimizer._dominates(male_puma.F, self.male_puma.F):
+                # TODO: Use domination ?
+                self.male_puma = male_puma
 
             # update history
             self.num_unselected_iters_between_best_four_exploit = np.roll(
@@ -215,24 +233,10 @@ class PumaOptimizer(Algorithm):
 
             self.num_unselected_iters_between_best_four_explor[-1] += 1
 
-        male_puma = RankAndCrowding().do(self.problem, new_pop, n_survive=1)[0]
-
-        # TODO: Note that this section is unclear in the paper,
-        #  and seems to be different in their code, so we should check it again
-        if PumaOptimizer._dominates(male_puma.F, self.male_puma.F):
-            # update the best solution
-            self.male_puma = male_puma
-
-            # update history
-            if is_explor:
-                self.best_four_pumas_scores_history_explor = np.roll(self.best_four_pumas_scores_history_explor, -1)
-                self.best_four_pumas_scores_history_explor[-1] = male_puma.F
-            else:
-                self.best_four_pumas_scores_history_exploit = np.roll(self.best_four_pumas_scores_history_exploit, -1)
-                self.best_four_pumas_scores_history_exploit[-1] = male_puma.F
-        else:
-            self.num_unselected_iters_between_best_four_explor[-1] += 1
-            self.num_unselected_iters_between_best_four_exploit[-1] += 1
+            self.best_four_pumas_scores_history_exploit = np.roll(
+                self.best_four_pumas_scores_history_exploit, -1, axis=0
+            )
+            self.best_four_pumas_scores_history_exploit[-1] = self.male_puma.F
 
         # update exploration score and exploitation score
         self.update_scores_experienced(is_explor)
@@ -328,11 +332,6 @@ class PumaOptimizer(Algorithm):
         # seq_cost_explor_norm = np.linalg.norm(seq_cost_explor[-1], ord=1)
         # seq_cost_exploit_norm = np.linalg.norm(seq_cost_exploit[-1], ord=1)
 
-        if seq_cost_explor[-1] != 0 and (self.lc is None or seq_cost_explor[-1] < self.lc):
-            self.lc = seq_cost_explor[-1]
-        if seq_cost_exploit[-1] != 0 and (self.lc is None or seq_cost_exploit[-1] < self.lc):
-            self.lc = seq_cost_exploit[-1]
-
         # compute final scores
         self.exploration_score = self.alpha_explor * (f1_explor + f2_explor) + delta_explor * self.lc * self.f3_explor
         self.exploitation_score = (
@@ -347,8 +346,12 @@ class PumaOptimizer(Algorithm):
         return no_worse and strictly_better
 
     def run_exploration(self, current_pop):
-        p = (1 - self.u_prob) / (len(current_pop))
+        u = self.u_prob
+        p = (1 - u) / (len(current_pop))
         new_pop = copy.deepcopy(current_pop)
+
+        # sort the population in ascending order of rank (i.e. the best solutions first)
+        new_pop = RankAndCrowding().do(self.problem, new_pop, n_survive=len(new_pop))
 
         for i in range(len(new_pop)):
             xi = new_pop[i]
@@ -379,7 +382,7 @@ class PumaOptimizer(Algorithm):
             j0 = np.random.randint(0, len(xi.X))  # xj0 will become zj0
 
             for j in range(len(xi.X)):
-                if j != j0 or np.random.rand() >= self.u_prob:
+                if j != j0 or np.random.rand() >= u:
                     # keep initial value
                     zi.X[j] = xi.X[j]
 
@@ -390,7 +393,7 @@ class PumaOptimizer(Algorithm):
             if PumaOptimizer._dominates(zi.F, xi.F):
                 new_pop[i] = zi
             else:
-                self.u_prob += p
+                u += p
 
         return new_pop
 

@@ -1,1 +1,1 @@
-# TODO: write, otehrwise remove this file
+# TODO: write, otherwise remove this file
