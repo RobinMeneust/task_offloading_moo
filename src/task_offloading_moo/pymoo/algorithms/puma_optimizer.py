@@ -119,13 +119,12 @@ class PumaOptimizer(Algorithm):
 
     def _initialize_infill(self):
         init_pop = self.initialization.do(self.problem, self.pop_size, algorithm=self)
-        self.male_puma = RankAndCrowding().do(self.problem, init_pop, n_survive=1)[0]
-        # if self._use_archive:
-        #     self._update_archive(init_pop)
         return init_pop
 
     def _initialize_advance(self, infills=None, **kwargs):
-        pass
+        self.male_puma = RankAndCrowding().do(self.problem, infills, n_survive=1)[0]
+        # if self._use_archive:
+        #     self._update_archive(init_pop)
 
     def _infill(self):
         if self.is_unexperienced:
@@ -141,7 +140,7 @@ class PumaOptimizer(Algorithm):
         return next_pop
 
     def _advance(self, infills=None, **kwargs):
-        pass
+        self.pop = infills
 
     def _finalize(self):
         pass
@@ -193,6 +192,7 @@ class PumaOptimizer(Algorithm):
     def experience_phase(self):
         is_explor = False
         new_pop = None
+
         if self.exploration_score > self.exploitation_score:
             is_explor = True
             new_pop = self.run_exploration(self.pop)

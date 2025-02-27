@@ -144,13 +144,21 @@ class Dataset:
     def get_run_time(self, task_idx, machine_idx):
         return self._run_time_matrix[task_idx, machine_idx]
 
-    def get_objectives(self, individual):
+    def evaluate_individual(self, individual):
         run_time = 0
         cost = 0
         for task_idx, machine_idx in enumerate(individual):
             run_time += self.get_run_time(task_idx, machine_idx)
             cost += self.get_cost(task_idx, machine_idx)
-        return run_time, cost
+        return np.array([run_time, cost])
+
+    def evaluate_population(self, individuals):
+        results = np.zeros((len(individuals), 2))
+
+        for i, individual in enumerate(individuals):
+            results[i] = self.evaluate_individual(individual)
+
+        return results
 
     def check_individual_constraints(self, individual):
         for task_idx, machine_idx in enumerate(individual):

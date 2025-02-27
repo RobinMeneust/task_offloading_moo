@@ -13,7 +13,7 @@ class TaskOffloadingProblem(Problem):
         )
 
     def _evaluate(self, x, out, *args, **kwargs):
-        out["F"] = [self.dataset_generator.get_objectives(x[i]) for i in range(len(x))]
+        out["F"] = self.dataset_generator.evaluate_population(x)
 
 
 if __name__ == "__main__":
