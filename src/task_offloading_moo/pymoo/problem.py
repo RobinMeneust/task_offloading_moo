@@ -15,6 +15,9 @@ class TaskOffloadingProblem(Problem):
     def _evaluate(self, x, out, *args, **kwargs):
         out["F"] = self.dataset_generator.evaluate_population(x)
 
+    def soft_repair(self, previous_individual, new_individual):
+        return self.dataset_generator.repair_individual_soft(previous_individual, new_individual)
+
 
 if __name__ == "__main__":
     problem = TaskOffloadingProblem(3, 10, 50)

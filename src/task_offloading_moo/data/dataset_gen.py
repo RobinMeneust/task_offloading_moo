@@ -150,6 +150,7 @@ class Dataset:
         for task_idx, machine_idx in enumerate(individual):
             run_time += self.get_run_time(task_idx, machine_idx)
             cost += self.get_cost(task_idx, machine_idx)
+
         return np.array([run_time, cost])
 
     def evaluate_population(self, individuals):
@@ -177,6 +178,27 @@ class Dataset:
             raise Exception("No valid machine found, task can't be run on this set of machines")
 
         return np.random.choice(valid_machines)  # Then select randomly one of them
+
+    def repair_individual_soft(self, previous_individual, new_individual):
+        new_individual = new_individual.astype(int)
+        half_vector = (new_individual - previous_individual) / 2
+
+        for task_idx, machine_idx in enumerate(new_individual):
+            if new_individual[task_idx] < 0 or new_individual[task_idx] >= len(self.get_machines()):
+                corrected_pos = int(previous_individual[task_idx] + half_vector[task_idx])
+                if corrected_pos < 0 or corrected_pos >= len(self.get_machines()):
+                    corrected_pos = previous_individual[task_idx] + (1 if half_vector[task_idx] > 0 else -1)
+
+                if (
+                    corrected_pos < 0
+                    or corrected_pos >= len(self.get_machines())
+                    or not self._is_ram_enough(task_idx, corrected_pos)
+                ):
+                    corrected_pos = previous_individual[task_idx]
+
+                new_individual[task_idx] = corrected_pos
+
+        return new_individual
 
     def repair_individual(self, individual):
         individual = individual.astype(int)

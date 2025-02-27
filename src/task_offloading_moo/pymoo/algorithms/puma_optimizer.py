@@ -32,6 +32,7 @@ class PumaOutput(MultiObjectiveOutput):
 class PumaOptimizer(Algorithm):
     def __init__(
         self,
+        use_soft_repair=False,
         pf1=0.5,
         pf2=0.5,
         pf3=0.3,
@@ -51,6 +52,7 @@ class PumaOptimizer(Algorithm):
         """Initializes PUMA optimizer.
 
         Args:
+            use_soft_repair (bool): Whether to use soft repair or not. Defaults to False
             pf1 (float): Weight of function 1 (escalation). Defaults to 0.5.
                 It uses distance between the best solution in initial population and at iter 1 (in unexperienced phase),
                 or between the best solution in previous population and at current iter (in experienced phase).
@@ -77,6 +79,8 @@ class PumaOptimizer(Algorithm):
             raise ValueError("The number of generations must be at least 3.")
 
         super().__init__(output=output, termination=get_termination("n_gen", n_max_iters - 3), **kwargs)
+
+        self.use_soft_repair = use_soft_repair
 
         self.current_iter = 0
         self.n_max_iters = n_max_iters
@@ -168,6 +172,18 @@ class PumaOptimizer(Algorithm):
             explor_pop = self.run_exploration(current_pop)
             exploit_pop = self.run_exploitation(current_pop)
 
+            # print("\n\n############\n\n")
+            #
+            # for x in explor_pop:
+            #     print(x.X)
+            #
+            # print("\n####\n")
+            #
+            # for x in exploit_pop:
+            #     print(x.X)
+
+            # raise Exception("Stop here")
+
             new_pop.append(explor_pop)
             new_pop.append(exploit_pop)
 
@@ -191,7 +207,6 @@ class PumaOptimizer(Algorithm):
 
         # update exploration score and exploitation score
         self.update_scores_unexperienced()
-
         return new_pop
 
     def experience_phase(self):
@@ -376,7 +391,10 @@ class PumaOptimizer(Algorithm):
                 zi.X = new_pop[a].X + g * (vec_ba + vec_ba - vec_dc + vec_dc - vec_fe)
 
                 # repair the solution
-                zi.X = self.repair(self.problem, Population.new("X", [zi.X]))[0].X
+                if self.use_soft_repair:
+                    zi.X = self.problem.soft_repair(xi.X, zi.X)
+                else:
+                    zi.X = self.repair(self.problem, Population.new("X", [zi.X]))[0].X
 
             # kind of crossover between xi and zi
             j0 = np.random.randint(0, len(xi.X))  # xj0 will become zj0
@@ -438,8 +456,11 @@ class PumaOptimizer(Algorithm):
                 zi = xi.copy()
                 zi.X = (np.multiply(random_puma.X, mean_puma) - (1**beta) * xi.X) / denominator  # element wise product
 
-            # repair the solutions
-            zi = self.repair(self.problem, Population.new("X", [zi.X]))[0]
+            # repair the solution
+            if self.use_soft_repair:
+                zi.X = self.problem.soft_repair(xi.X, zi.X)
+            else:
+                zi.X = self.repair(self.problem, Population.new("X", [zi.X]))[0].X
 
             # evaluate the new solutions
             zi.F = self.problem.evaluate([zi.X])[0]
