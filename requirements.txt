@@ -2,6 +2,7 @@ numpy
 pymoo
 matplotlib
 flake8
+flake8-docstrings
 black
 pre-commit
 jupyter

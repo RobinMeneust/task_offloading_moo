@@ -1,3 +1,5 @@
+"""This file contains the Dataset class, which generates the data for the task offloading problem."""
+
 # based on https://www.kaggle.com/datasets/sachin26240/vehicularfogcomputing
 # https://aws.amazon.com/ec2/pricing/on-demand/
 # https://instances.vantage.sh/aws/ec2/c4.4xlarge
@@ -11,7 +13,26 @@ from task_offloading_moo.data.load_data_config import load_data_config
 
 
 class Dataset:
+    """Class to generate the data for the task offloading problem.
+
+    Attributes:
+        _propagation_speed (float): Speed of propagation of the signal in the fiber.
+        _tasks (np.ndarray): Array of tasks.
+        _machines (np.ndarray): Array of machines.
+        _run_time_matrix (np.ndarray): Matrix of execution times for each task and machine.
+        _cost_matrix (np.ndarray): Matrix of costs for each task and machine.
+    """
+
     def __init__(self, num_cloud_machines, num_fog_machines, num_tasks, use_random_machines=True, seed=None):
+        """Initialize the Dataset instance.
+
+        Args:
+            num_cloud_machines (int): Number of cloud machines.
+            num_fog_machines (int): Number of fog machines.
+            num_tasks (int): Number of tasks.
+            use_random_machines (bool): Whether to use random machines or not.
+            seed (int): Seed for the random number generator.
+        """
         if seed is not None:
             np.random.seed(seed)
 
@@ -38,6 +59,16 @@ class Dataset:
         self._run_time_matrix, self._cost_matrix = self._compute_run_time_cost_matrices()
 
     def _compute_latency(self, distance, data_quantity, bandwidth):
+        """Compute the latency of a task on a machine.
+
+        Args:
+            distance (float): Distance between the task and the machine.
+            data_quantity (float): Quantity of data to transfer.
+            bandwidth (float): Bandwidth of the network.
+
+        Returns:
+            float: Latency of the task on the machine.
+        """
         propagation_time = 2 * (distance / self._propagation_speed)  # *2 because it goes and comes back
         transfer_time = data_quantity / bandwidth  # data_quantity = in & out
 
@@ -45,20 +76,55 @@ class Dataset:
 
     @staticmethod
     def _compute_execution_time(task, machine):
+        """Compute the execution time of a task on a machine.
+
+        Args:
+            task (dict): Task.
+            machine (dict): Machine.
+
+        Returns:
+            float: Execution time of the task on the machine.
+        """
         return task["num_instructions"] / machine["cpu_rate"]
 
     @staticmethod
     def _compute_cost(task, machine, exec_time):
+        """Compute the cost of a task on a machine.
+
+        Args:
+            task (dict): Task.
+            machine (dict): Machine.
+            exec_time (float): Execution time of the task on the machine.
+
+        Returns:
+            float: Cost of the task on the machine.
+        """
         return (machine["cpu_usage_cost"] + machine["ram_usage_cost"] * task["ram_required"]) * exec_time + machine[
             "bandwidth_usage_cost"
         ] * (task["in_traffic"] + task["out_traffic"])
 
     def _compute_total_time(self, task, machine, exec_time):
+        """Compute the total time of a task on a machine.
+
+        Args:
+            task (dict): Task.
+            machine (dict): Machine.
+            exec_time (float): Execution time of the task on the machine.
+
+        Returns:
+            float: Total time of the task on the machine.
+        """
         return exec_time + self._compute_latency(
             machine["distance_edge"], task["in_traffic"] + task["out_traffic"], machine["bandwidth"]
         )
 
     def _compute_run_time_cost_matrices(self):
+        """Compute the matrices of execution times and costs for each task and machine.
+
+        Returns:
+            np.ndarray: Matrix of execution times for each task and machine.
+            np.ndarray: Matrix of costs for each task and machine.
+        """
         run_time_matrix = np.zeros((self.get_num_tasks(), self.get_num_machines()))
         cost_matrix = np.zeros((self.get_num_tasks(), self.get_num_machines()))
 
@@ -71,6 +137,15 @@ class Dataset:
         return run_time_matrix, cost_matrix
 
     def _is_ram_enough(self, task_idx, machine_idx):
+        """Check if the RAM of a machine is enough for a task.
+
+        Args:
+            task_idx (int): Index of the task.
+            machine_idx (int): Index of the machine.
+
+        Returns:
+            bool: Whether the RAM of the machine is enough for the task or not.
+        """
         if (
             task_idx < 0
             or task_idx >= len(self.get_tasks())
@@ -83,6 +158,15 @@ class Dataset:
 
     @staticmethod
     def gen_items_from_list(num_values, items_list):
+        """Generate a list of items from a list of items (can be repeated).
+
+        Args:
+            num_values (int): Number of values to generate.
+            items_list (list): List of items to choose from.
+
+        Returns:
+            np.ndarray: Array of items
+        """
         items = np.empty(num_values, dtype=object)
         random_indices = np.random.randint(0, len(items_list), size=num_values)
 
@@ -93,6 +177,17 @@ class Dataset:
 
     @staticmethod
     def gen_items_from_domain(num_values, variables_domain, same_scale_pos=False):
+        """Generate a list of items from a domain of variables.
+
+        Args:
+            num_values (int): Number of values to generate.
+            variables_domain (dict): Dictionary of variables and their domain.
+            same_scale_pos (bool): Whether to generate the values at the same scale or not
+                (if a variable has a low value on its range, then the others too).
+
+        Returns:
+            np.ndarray: Array of items
+        """
         items = np.empty(num_values, dtype=object)
         values = {}
         rand_pos = None
@@ -119,12 +214,31 @@ class Dataset:
         return items
 
     def get_tasks(self):
+        """Get the tasks.
+
+        Returns:
+            np.ndarray: Array of tasks.
+        """
         return self._tasks
 
     def get_machines(self):
+        """Get the machines.
+
+        Returns:
+            np.ndarray: Array of machines.
+        """
         return self._machines
 
     def create_pop(self, pop_size, auto_repair=True):
+        """Create a population of individuals.
+
+        Args:
+            pop_size (int): Size of the population.
+            auto_repair (bool): Whether to repair the individuals or not.
+
+        Returns:
+            np.ndarray: Population of individuals.
+        """
         pop = np.empty((pop_size, len(self._tasks)), dtype=int)
         for i in range(pop_size):
             pop[i] = np.random.randint(0, len(self._machines), size=len(self._tasks))
@@ -133,18 +247,54 @@ class Dataset:
         return pop
 
     def get_num_tasks(self):
+        """Get the number of tasks.
+
+        Returns:
+            int: Number of tasks.
+        """
         return len(self._tasks)
 
     def get_num_machines(self):
+        """Get the number of machines.
+
+        Returns:
+            int: Number of machines.
+        """
         return len(self._machines)
 
     def get_cost(self, task_idx, machine_idx):
+        """Get the cost of a task on a machine.
+
+        Args:
+            task_idx (int): Index of the task.
+            machine_idx (int): Index of the machine.
+
+        Returns:
+            float: Cost of the task on the machine.
+        """
         return self._cost_matrix[task_idx, machine_idx]
 
     def get_run_time(self, task_idx, machine_idx):
+        """Get the run time of a task on a machine.
+
+        Args:
+            task_idx (int): Index of the task.
+            machine_idx (int): Index of the machine.
+
+        Returns:
+            float: Run time of the task on the machine.
+        """
         return self._run_time_matrix[task_idx, machine_idx]
 
     def evaluate_individual(self, individual):
+        """Evaluate an individual.
+
+        Args:
+            individual (np.ndarray): Individual to evaluate.
+
+        Returns:
+            np.ndarray: Array of objective values.
+        """
         run_time = 0
         cost = 0
         for task_idx, machine_idx in enumerate(individual):
@@ -154,6 +304,14 @@ class Dataset:
         return np.array([run_time, cost])
 
     def evaluate_population(self, individuals):
+        """Evaluate a population.
+
+        Args:
+            individuals (np.ndarray): Population to evaluate.
+
+        Returns:
+            np.ndarray: Array of objective values for each individual.
+        """
         results = np.zeros((len(individuals), 2))
 
         for i, individual in enumerate(individuals):
@@ -162,12 +320,28 @@ class Dataset:
         return results
 
     def check_individual_constraints(self, individual):
+        """Check if an individual satisfies the constraints.
+
+        Args:
+            individual (np.ndarray): Individual to check.
+
+        Returns:
+            bool: Whether the individual satisfies the constraints or not.
+        """
         for task_idx, machine_idx in enumerate(individual):
             if not self._is_ram_enough(task_idx, machine_idx):
                 return False
         return True
 
     def get_random_valid_machine(self, task_idx):
+        """Get a random valid machine for a task.
+
+        Args:
+            task_idx (int): Index of the task.
+
+        Returns:
+            int: Index of the machine.
+        """
         # First list all valid machines
         valid_machines = []
         for machine_idx, machine in enumerate(self.get_machines()):
@@ -180,6 +354,18 @@ class Dataset:
         return np.random.choice(valid_machines)  # Then select randomly one of them
 
     def repair_individual_soft(self, previous_individual, new_individual):
+        """Repair an individual softly.
+
+        Consider previous solution and move it towards new one considering boundaries.
+        If it's out of bounds after different repairs attempt, it will be set to the previous solution.
+
+        Args:
+            previous_individual (np.ndarray): Previous individual.
+            new_individual (np.ndarray): New individual.
+
+        Returns:
+            np.ndarray: Repaired individual.
+        """
         new_individual = new_individual.astype(int)
         half_vector = (new_individual - previous_individual) / 2
 
@@ -201,6 +387,14 @@ class Dataset:
         return new_individual
 
     def repair_individual(self, individual):
+        """Repair an individual (simple method using bounds).
+
+        Args:
+            individual (np.ndarray): Individual to repair.
+
+        Returns:
+            np.ndarray: Repaired individual.
+        """
         individual = individual.astype(int)
         for task_idx in range(len(individual)):
             # if out of bounds
@@ -214,10 +408,20 @@ class Dataset:
 
     @staticmethod
     def get_num_objectives():
+        """Get the number of objectives.
+
+        Returns:
+            int: Number of objectives.
+        """
         return 2
 
     @staticmethod
     def get_objective_names():
+        """Get the names of the objectives.
+
+        Returns:
+            list: Names of the objectives.
+        """
         return ["Run Time (s)", "Cost ($)"]
 
 

@@ -1,3 +1,5 @@
+"""This file contains the (Pymoo) operators for the task offloading problem."""
+
 from pymoo.util.archive import default_archive  # MultiObjectiveArchive
 import copy
 import numpy as np
@@ -13,8 +15,16 @@ from pymoo.util.display.column import Column
 
 
 class PumaOutput(MultiObjectiveOutput):
+    """Output class for PUMA algorithm.
+
+    Attributes:
+        explor (Column): Exploration score column.
+        exploit (Column): Exploitation score column.
+        is_explore (Column): Whether the algorithm is exploring or exploiting.
+    """
 
     def __init__(self):
+        """Initialize the output class."""
         super().__init__()
         self.explor = Column("explor", width=13)
         self.exploit = Column("exploit", width=13)
@@ -22,6 +32,11 @@ class PumaOutput(MultiObjectiveOutput):
         self.columns += [self.explor, self.exploit, self.is_explore]
 
     def update(self, algorithm):
+        """Update the output with the given PUMA Optimizer state.
+
+        Args:
+            algorithm (PumaOptimizer): Algorithm to update the output with.
+        """
         super().update(algorithm)
 
         self.explor.set(algorithm.exploration_score)
@@ -30,6 +45,43 @@ class PumaOutput(MultiObjectiveOutput):
 
 
 class PumaOptimizer(Algorithm):
+    """PUMA optimizer.
+
+    Attributes:
+        use_soft_repair (bool): Whether to use soft repair or not.
+        current_iter (int): Current iteration.
+        n_max_iters (int): Maximum number of iterations.
+        initialization (Initialization): Initialization method.
+        pop_size (int): Population size.
+        repair (Repair): Repair method.
+        male_puma (Individual): Best solution.
+        is_unexperienced (bool): Whether the algorithm is in the unexperienced phase.
+        exploration_score (float): Exploration score.
+        exploitation_score (float): Exploitation score.
+        pf1 (float): Weight of function 1 (escalation).
+        pf2 (float): Weight of function 2 (resonance).
+        pf3 (float): Weight of function 3 (diversity).
+        u_prob (float): Probability in the exploration phase of changing a component with a new value.
+        l_prob (float): Probability that the ambush type is "small jump towards 2 other pumas" instead of
+            "long jump towards the best puma".
+        alpha (float): The higher it is, the smaller the new puma components will be in the run strategy in
+            exploitation phase, and thus the higher is the perturbation.
+        num_objectives (int): Number of objectives.
+        best_four_pumas_scores_history_explor (np.ndarray): Best four pumas scores history in exploration phase.
+        num_unselected_iters_between_best_four_explor (np.ndarray): Number of unselected iterations
+            between best four in exploration phase.
+        best_four_pumas_scores_history_exploit (np.ndarray): Best four pumas scores history in exploitation phase.
+        num_unselected_iters_between_best_four_exploit (np.ndarray): Number of unselected iterations
+            between best four in exploitation phase.
+        f3_explor (float): F3 score in exploration phase.
+        f3_exploit (float): F3 score in exploitation phase.
+        alpha_explor (float): Alpha in exploration phase.
+        alpha_exploit (float): Alpha in exploitation phase.
+        lc (float): LC value.
+        archive_size (int): Size of the archive.
+        _use_archive (bool): Whether to use the archive or not.
+    """
+
     def __init__(
         self,
         use_soft_repair=False,
@@ -49,7 +101,7 @@ class PumaOptimizer(Algorithm):
         use_archive=True,
         **kwargs
     ):
-        """Initializes PUMA optimizer.
+        """Initialize PUMA optimizer.
 
         Args:
             use_soft_repair (bool): Whether to use soft repair or not. Defaults to False
@@ -74,7 +126,6 @@ class PumaOptimizer(Algorithm):
             archive_size (int): Size of the archive. If None, then no limit is set. Defaults to 25.
             use_archive (bool): Whether to use the archive or not. Defaults to True.
         """
-
         if n_max_iters < 3:
             raise ValueError("The number of generations must be at least 3.")
 
@@ -122,20 +173,36 @@ class PumaOptimizer(Algorithm):
         self._use_archive = use_archive
 
     def _setup(self, problem, **kwargs):
+        """Set up the algorithm.
+
+        Args:
+            problem (Problem): Problem to solve.
+        """
         if self._use_archive:
             # self.archive = MultiObjectiveArchive(max_size=archive_size, truncate_size=None)
             self.archive = default_archive(self.problem, max_size=self.archive_size)
 
     def _initialize_infill(self):
+        """Initialize the population.
+
+        Returns:
+            Population: Initial population.
+        """
         init_pop = self.initialization.do(self.problem, self.pop_size, algorithm=self)
         return init_pop
 
     def _initialize_advance(self, infills=None, **kwargs):
+        """Do what is necessary after the initialization."""
         self.male_puma = RankAndCrowding().do(self.problem, infills, n_survive=1)[0]
         # if self._use_archive:
         #     self._update_archive(init_pop)
 
     def _infill(self):
+        """Create the next population.
+
+        Returns:
+            Population: Next population.
+        """
         if self.is_unexperienced:
             next_pop = self.unexperienced_phase()
             self.is_unexperienced = False
@@ -149,12 +216,19 @@ class PumaOptimizer(Algorithm):
         return next_pop
 
     def _advance(self, infills=None, **kwargs):
+        """Do what is necessary after the infill."""
         self.pop = infills
 
     def _finalize(self):
+        """Do what is necessary after the optimization (end of the algorithm)."""
         pass
 
     def unexperienced_phase(self):
+        """Run the unexperienced phase to generate the next population.
+
+        Returns:
+            Population: Next population.
+        """
         current_pop = self.pop
         new_pop = [copy.deepcopy(current_pop)]
 
@@ -210,6 +284,11 @@ class PumaOptimizer(Algorithm):
         return new_pop
 
     def experience_phase(self):
+        """Run the experienced phase to generate the next population.
+
+        Returns:
+            Population: Next population.
+        """
         is_explor = False
         new_pop = None
 
@@ -259,8 +338,8 @@ class PumaOptimizer(Algorithm):
         return new_pop
 
     def update_scores_unexperienced(self):
+        """Update the exploration and exploitation scores in the unexperienced phase."""
         # TODO: We can try to use either the rank or the objectives as they are for the cost
-
         seq_cost_explor = np.empty((3, self.num_objectives))
         seq_cost_exploit = np.empty((3, self.num_objectives))
 
@@ -295,6 +374,11 @@ class PumaOptimizer(Algorithm):
         self.exploitation_score = pf1_squared * f1_exploit + pf2_squared * f2_exploit
 
     def update_scores_experienced(self, is_explor):
+        """Update the exploration and exploitation scores in the experienced phase.
+
+        Args:
+            is_explor (bool): Whether the algorithm is exploring or exploiting.
+        """
         # update history
         # TODO: Seq computation for unexperienced and experienced phases should be merged and optimized
         #  (replace best_four_pumas_scores_history_explor)
@@ -355,12 +439,31 @@ class PumaOptimizer(Algorithm):
 
     @staticmethod
     def _dominates(x, z):
+        """Check if x dominates z.
+
+        TODO: (Suggestion) Move this method to a utility class in another file.
+
+        Args:
+            x (np.ndarray): First solution.
+            z (np.ndarray): Second solution.
+
+        Returns:
+            bool: Whether x dominates z or not.
+        """
         no_worse = all(x_i <= z_i for x_i, z_i in zip(x, z))
         strictly_better = any(x_i < z_i for x_i, z_i in zip(x, z))
 
         return no_worse and strictly_better
 
     def run_exploration(self, current_pop):
+        """Run the exploration phase to generate the next population.
+
+        Args:
+            current_pop (Population): Current population.
+
+        Returns:
+            Population: Next population.
+        """
         u = self.u_prob
         p = (1 - u) / (len(current_pop))
         new_pop = copy.deepcopy(current_pop)
@@ -416,6 +519,14 @@ class PumaOptimizer(Algorithm):
         return new_pop
 
     def run_exploitation(self, current_pop):
+        """Run the exploitation phase to generate the next population.
+
+        Args:
+            current_pop (Population): Current population.
+
+        Returns:
+            Population: Next population.
+        """
         dim = len(current_pop[0].X)
         new_pop = copy.deepcopy(current_pop)
 
