@@ -49,3 +49,30 @@ With conda use `conda activate moo_project` to activate the environment.
 - IPC (instructions per cycle) is assumed to be 1, but it varies actually
 - CPS (cycles per second) is clock frequency
 - cpu_rate = IPS (instructions per second) is calculated as $IPC \times CPS = 2 CPS$ 
+
+
+
+## Documentation
+
+### Requirements (NOT in requirements.txt)
+
+- sphinx
+- myst_parser
+- rst2pdf
+- sphinx-mdinclude
+- sphinx_rtd_theme
+
+
+`uv pip install sphinx myst_parser rst2pdf sphinx-mdinclude sphinx_rtd_theme`
+
+### Generation
+
+#### Setup
+
+1. Generate the rst files from the code: `sphinx-apidoc -o docs/source/ src/task_offloading_moo`
+2. Generate the documentation from the rst files 
+   - In HTML: `docs/make.bat html`
+   - In PDF: `docs/make.bat pdf`
+3. Open the documentation:
+   - HTML: Open `docs/_build/html/index.html`
+   - PDF: Open `docs/_build/pdf/MoFGBMLPy.pdf`
