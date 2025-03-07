@@ -12,7 +12,7 @@ class TaskOffloadingProblem(Problem):
         dataset_generator (Dataset): Dataset object to generate the data.
     """
 
-    def __init__(self, num_cloud_machines=3, num_fog_machines=10, num_tasks=50, seed=2025):
+    def __init__(self, num_cloud_machines=3, num_fog_machines=10, num_tasks=50, seed=2019, use_random_machines=False):
         """Initialize the problem with the given parameters.
 
         Args:
@@ -20,9 +20,14 @@ class TaskOffloadingProblem(Problem):
             num_fog_machines (int): Number of fog machines.
             num_tasks (int): Number of tasks.
             seed (int): Random seed for the dataset generator.
+            use_random_machines (bool): Whether to use random machines for the dataset.
         """
         self.dataset_generator = Dataset(
-            num_cloud_machines=num_cloud_machines, num_fog_machines=num_fog_machines, num_tasks=num_tasks, seed=seed
+            num_cloud_machines=num_cloud_machines,
+            num_fog_machines=num_fog_machines,
+            num_tasks=num_tasks,
+            seed=seed,
+            use_random_machines=use_random_machines,
         )
         super().__init__(
             n_var=num_tasks, n_obj=Dataset.get_num_objectives(), xl=0, xu=num_cloud_machines + num_fog_machines - 1

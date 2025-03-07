@@ -21,6 +21,7 @@ class Dataset:
         _machines (np.ndarray): Array of machines.
         _run_time_matrix (np.ndarray): Matrix of execution times for each task and machine.
         _cost_matrix (np.ndarray): Matrix of costs for each task and machine.
+        _rng (self._rng.Generator): Random number generator.
     """
 
     def __init__(self, num_cloud_machines, num_fog_machines, num_tasks, use_random_machines=True, seed=None):
@@ -34,7 +35,9 @@ class Dataset:
             seed (int): Seed for the random number generator.
         """
         if seed is not None:
-            np.random.seed(seed)
+            self._rng = np.random.default_rng(seed)
+        else:
+            self._rng = np.random.default_rng()
 
         self._propagation_speed = 3e8 / 1.44  # m/s (https://www.rp-photonics.com/fibers.html)
 
@@ -48,10 +51,9 @@ class Dataset:
             )
             fog_machines = self.gen_items_from_domain(num_fog_machines, machines_domains["fog"], same_scale_pos=True)
         else:
-            raise Exception("Not yet implemented")
-            # machines_lists = load_data_config("machines_lists")
-            # cloud_machines = self.gen_items_from_list(num_cloud_machines, machines_lists["cloud"])
-            # fog_machines = self.gen_items_from_list(num_fog_machines, machines_lists["fog"])
+            machines_lists = load_data_config("machines_lists")
+            cloud_machines = self.gen_items_from_list(num_cloud_machines, machines_lists["cloud"])
+            fog_machines = self.gen_items_from_list(num_fog_machines, machines_lists["fog"])
 
         self._machines = np.concatenate((cloud_machines, fog_machines))
 
@@ -156,8 +158,7 @@ class Dataset:
 
         return self._tasks[task_idx]["ram_required"] <= self._machines[machine_idx]["ram_limit"]
 
-    @staticmethod
-    def gen_items_from_list(num_values, items_list):
+    def gen_items_from_list(self, num_values, items_list):
         """Generate a list of items from a list of items (can be repeated).
 
         Args:
@@ -168,15 +169,14 @@ class Dataset:
             np.ndarray: Array of items
         """
         items = np.empty(num_values, dtype=object)
-        random_indices = np.random.randint(0, len(items_list), size=num_values)
+        random_indices = self._rng.integers(0, len(items_list), size=num_values)
 
         for i in range(num_values):
             items[i] = items_list[random_indices[i]]
 
         return items
 
-    @staticmethod
-    def gen_items_from_domain(num_values, variables_domain, same_scale_pos=False):
+    def gen_items_from_domain(self, num_values, variables_domain, same_scale_pos=False):
         """Generate a list of items from a domain of variables.
 
         Args:
@@ -193,19 +193,19 @@ class Dataset:
         rand_pos = None
 
         if same_scale_pos:
-            rand_pos = np.random.rand(num_values)
+            rand_pos = self._rng.random(num_values)
 
         for k, var_range in variables_domain.items():
             if isinstance(var_range[0], int):
                 if same_scale_pos:
                     values[k] = np.round(rand_pos * (var_range[1] - var_range[0]) + var_range[0]).astype(int)
                 else:
-                    values[k] = np.random.randint(var_range[0], var_range[1] + 1, size=num_values)
+                    values[k] = self._rng.integers(var_range[0], var_range[1] + 1, size=num_values)
             elif isinstance(var_range[0], float):
                 if same_scale_pos:
                     values[k] = rand_pos * (var_range[1] - var_range[0]) + var_range[0]
                 else:
-                    values[k] = np.random.rand(num_values) * (var_range[1] - var_range[0]) + var_range[0]
+                    values[k] = self._rng.random(num_values) * (var_range[1] - var_range[0]) + var_range[0]
 
             else:
                 raise Exception("invalid type (should be int or float)")
@@ -241,7 +241,7 @@ class Dataset:
         """
         pop = np.empty((pop_size, len(self._tasks)), dtype=int)
         for i in range(pop_size):
-            pop[i] = np.random.randint(0, len(self._machines), size=len(self._tasks))
+            pop[i] = self._rng.integers(0, len(self._machines), size=len(self._tasks))
             if auto_repair:
                 pop[i] = self.repair_individual(pop[i])
         return pop
@@ -351,7 +351,7 @@ class Dataset:
         if len(valid_machines) == 0:
             raise Exception("No valid machine found, task can't be run on this set of machines")
 
-        return np.random.choice(valid_machines)  # Then select randomly one of them
+        return self._rng.choice(valid_machines)  # Then select randomly one of them
 
     def repair_individual_soft(self, previous_individual, new_individual):
         """Repair an individual softly.
@@ -428,7 +428,7 @@ class Dataset:
 # TEST
 
 if __name__ == "__main__":
-    dataset = Dataset(num_cloud_machines=3, num_fog_machines=10, num_tasks=50, seed=2025)
+    dataset = Dataset(num_cloud_machines=3, num_fog_machines=10, num_tasks=50, seed=2019)
 
     pop = dataset.create_pop(pop_size=3)
     print(pop)
