@@ -2,13 +2,19 @@
 
 import sys
 import copy
-
-# Add the project root to the Python path
-sys.path.append("../")
-
 import numpy as np  # noqa: E402
 from pymoo.core.algorithm import Algorithm  # noqa: E402
 from pymoo.core.population import Population  # noqa: E402
+from pymoo.util.display.multi import MultiObjectiveOutput
+from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting  # noqa: E402
+from pymoo.core.individual import Individual  # noqa: E402
+from src.task_offloading_moo.pymoo.algorithms.MOFDA_archive import MOFDAArchive  # noqa: E402
+
+from task_offloading_moo.pymoo.problem import TaskOffloadingProblem
+from task_offloading_moo.pymoo.operators.repair import TaskOffloadingRepair
+from task_offloading_moo.pymoo.operators.sampling import TaskOffloadingSampling
+from pymoo.optimize import minimize
+from pymoo.visualization.scatter import Scatter
 
 # For newer pymoo versions use:
 """
@@ -24,9 +30,9 @@ except ImportError:
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
 """
-from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting  # noqa: E402
-from pymoo.core.individual import Individual  # noqa: E402
-from src.task_offloading_moo.pymoo.algorithms.MOFDA_archive import MOFDAArchive  # noqa: E402
+
+# Add the project root to the Python path
+sys.path.append("../")
 
 
 class MOFDAOptimizer(Algorithm):
@@ -49,7 +55,7 @@ class MOFDAOptimizer(Algorithm):
         **kwargs,
     ):
         """Initialize the MOFDA algorithm with the given parameters."""
-        super().__init__(**kwargs)
+        super().__init__(output=MultiObjectiveOutput(), **kwargs)
 
         self.pop_size = pop_size
         self.sampling = sampling
@@ -171,10 +177,9 @@ class MOFDAOptimizer(Algorithm):
                     # Basic bounds repair as fallback
                     xl, xu = self.problem.xl, self.problem.xu
                     neighbors_X[j] = np.clip(neighbors_X[j], xl, xu).astype(int)
-                    # Inside your _infill method, after generating neighbors_X:
-            num_machines = (
-                self.problem.dataset_generator.num_cloud_machines + self.problem.dataset_generator.num_fog_machines
-            )  # get number of machines from the problem
+
+            num_machines = self.problem.dataset_generator.get_num_machines()
+
             for j in range(len(neighbors_X)):
                 # Round the solution and cast to integer
                 repaired = np.round(neighbors_X[j]).astype(int)
@@ -184,6 +189,8 @@ class MOFDAOptimizer(Algorithm):
                 if self.use_soft_repair and hasattr(self.problem, "soft_repair"):
                     repaired = self.problem.soft_repair(flow_X, repaired)
                 neighbors_X[j] = repaired
+            neighbors_X = neighbors_X.astype(int)
+
             # Create population with repaired solutions
             neighbors = Population.new("X", neighbors_X)
             self.evaluator.eval(self.problem, neighbors)
@@ -257,10 +264,9 @@ class MOFDAOptimizer(Algorithm):
 
         # Save algorithm state in history
         if self.save_history and self.current_iter % 1 == 0:
-            self.history.append(self.copy(deep=False))
+            self.history.append(self.copy(deep=True))
 
         self.current_iter += 1
-        print(f"Generation {self.current_iter}/{self.n_max_iters}")
 
     def _select(self, pop, off):
         # Combine parent and offspring population
@@ -342,3 +348,39 @@ class MOFDAOptimizer(Algorithm):
             if len(self.pop) > 0 and self.pop.get("X") is not None:
                 n_vars = self.pop.get("X").shape[1]
                 self.opt.set("X", np.zeros((len(self.opt), n_vars)))
+
+
+if __name__ == "__main__":
+    # Create the optimizer
+    pop_size = 100
+    n_max_iters = 10
+
+    num_cloud_machines = 30
+    num_fog_machines = 20
+    num_tasks = 500
+
+    algorithm = MOFDAOptimizer(
+        repair=TaskOffloadingRepair(),
+        use_soft_repair=True,
+        pop_size=pop_size,
+        sampling=TaskOffloadingSampling(),
+        n_max_iters=n_max_iters,
+        archive_size=100,
+        save_history=True,
+        w=0.4,
+        c1=2,
+        c2=2,
+        beta=4,
+        delta=0.5,
+    )
+
+    problem = TaskOffloadingProblem(num_cloud_machines, num_fog_machines, num_tasks)
+
+    # Run the optimizer
+    res = minimize(problem, algorithm, seed=1, verbose=True)
+
+    # Create a scatter plot of the results
+    plot = Scatter(title="MOFDA")
+    plot.add(res.F)
+    plot.axis_labels = problem.dataset_generator.get_objective_names()
+    _ = plot.show()
