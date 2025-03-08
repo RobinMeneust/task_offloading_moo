@@ -15,7 +15,7 @@ from pymoo.util.display.column import Column
 from enum import Enum
 
 
-class Mode(Enum, int):
+class Mode(int, Enum):
     """Mode of the PUMA algorithm (exploration or exploitation)."""
 
     EXPLORE = 0
@@ -163,7 +163,7 @@ class PumaOptimizer(Algorithm):
         self.alpha = alpha
         self.num_objectives = num_objectives
 
-        self.seq_cost = np.empty((len(Mode), 3, self.num_objectives), dtype=float)
+        self.seq_cost = np.empty((len(Mode), 3), dtype=float)
         self.seq_time = np.empty((len(Mode), 3), dtype=float)
         self.modes_num_unselected_iters = np.empty(len(Mode), dtype=int)
 
@@ -246,7 +246,7 @@ class PumaOptimizer(Algorithm):
         self.seq_time.fill(1)
 
         # apply both exploration and exploitation for 3 iterations
-        for i in range(1, 4):
+        for i in range(0, 3):
             new_pop = [copy.deepcopy(current_pop)]
 
             explor_pop = self.run_exploration(current_pop)
@@ -348,7 +348,7 @@ class PumaOptimizer(Algorithm):
         """Compute the resonance score (f2)."""
         return np.sum(self.seq_cost, axis=1) / np.sum(self.seq_time, axis=1)
 
-    def update_diversity_score(self, is_explor):
+    def update_diversity_score(self):
         """Compute the diversity score (f3)."""
         is_explor = self.exploration_score > self.exploitation_score
 
