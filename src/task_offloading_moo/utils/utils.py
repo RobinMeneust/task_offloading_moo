@@ -44,7 +44,10 @@ def save_generations_video_pymoo(history, out_path, file_name_without_extension)
             opt_pop = entry.opt.get("F")
             full_pop = np.array([x for x in full_pop if x not in opt_pop])
 
-            sc.add(full_pop, color="blue")
+            if len(full_pop) != 0:
+                sc.add(full_pop, color="blue")
+            elif len(opt_pop) == 0:
+                raise ValueError("No data to plot")
             sc.add(opt_pop, color="red")
 
             sc.do()

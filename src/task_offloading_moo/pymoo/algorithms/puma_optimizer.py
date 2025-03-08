@@ -201,7 +201,7 @@ class PumaOptimizer(Algorithm):
 
     def _initialize_advance(self, infills=None, **kwargs):
         """Do what is necessary after the initialization."""
-        self.male_puma = copy.deepcopy(RankAndCrowding().do(self.problem, infills, n_survive=1)[0])
+        self.male_puma = self.get_male_puma(infills)
         # if self._use_archive:
         #     self._update_archive(init_pop)
 
@@ -231,48 +231,126 @@ class PumaOptimizer(Algorithm):
         """Do what is necessary after the optimization (end of the algorithm)."""
         pass
 
+    def compute_distance_cost(self, ind1, ind2, pop=None):
+        """Compute the distance cost between two individuals.
+
+        We consider we compare ind1 relative to ind2. If ind1 is worse then distance is 0.
+
+        Args:
+            ind1 (Individual): First individual.
+            ind2 (Individual): Second individual.
+            pop (Population): Population to consider. Defaults to None (i.e. use self.pop for distance computation).
+
+        Returns:
+            float: Distance cost.
+        """
+        # return np.linalg.norm(ind1.F - ind2.F, ord=1) # L1 norm version
+
+        weight_rank = 0.8
+
+        if pop is None:
+            pop = self.pop
+        pop = copy.deepcopy(pop)
+
+        # check if ind1.X is in pop.get("X")
+        if not np.any(np.all(pop.get("X") == ind1.X, axis=1)):
+            new_pop = Population.new("X", np.array([ind1.X]))
+            pop = Population.merge(pop, new_pop)
+        if not np.any(np.all(pop.get("X") == ind2.X, axis=1)):
+            new_pop = Population.new("X", np.array([ind2.X]))
+            pop = Population.merge(pop, new_pop)
+        pop = RankAndCrowding().do(self.problem, pop)
+
+        # get back the individuals from X values
+        ind1 = pop[np.all(pop.get("X") == ind1.X, axis=1)][0]
+        ind2 = pop[np.all(pop.get("X") == ind2.X, axis=1)][0]
+
+        rank_diff = np.abs(ind1.data["rank"] - ind2.data["rank"])
+        crowding_diff = np.abs(ind1.data["crowding"] - ind2.data["crowding"])
+
+        if np.isnan(crowding_diff):
+            crowding_diff = 0
+
+        # clip values and consider the case where ind2 is better than ind1
+        if ind1.data["rank"] > ind2.data["rank"]:  # ind1 is worse (low rank is better)
+            return 0
+        elif rank_diff > 10:
+            rank_diff = 10
+
+        if ind1.data["crowding"] < ind2.data["crowding"]:  # same as above (high crowding is better)
+            crowding_diff = 0
+        elif crowding_diff > 10:
+            crowding_diff = 10
+
+        return weight_rank * rank_diff + (1 - weight_rank) * crowding_diff
+
+    def get_male_puma(self, pop):
+        """Get the best solution from the population (male puma). Randomly selects from the lowest rank.
+
+        Args:
+            pop (Population): Population to get the best solution from.
+
+        Returns:
+            Individual: Best solution.
+        """
+        sorted_pop = copy.deepcopy(pop)
+
+        # Rank and crowding sort
+        sorted_pop = RankAndCrowding().do(self.problem, sorted_pop)
+
+        # We keep lowest rank values only
+        min_rank = min(ind.data["rank"] for ind in sorted_pop)
+        elite_pop = [ind for ind in sorted_pop if ind.data["rank"] == min_rank]
+
+        # Choose a solution randomly from the best solutions
+        male_puma = np.random.choice(elite_pop, 1)[0]
+        return male_puma
+
     def unexperienced_phase(self):
         """Run the unexperienced phase to generate the next population.
 
         Returns:
             Population: Next population.
         """
-        current_pop = self.pop
-
-        initial_best = copy.deepcopy(RankAndCrowding().do(self.problem, current_pop, n_survive=1)[0])
-        prev_best_F = np.empty((len(Mode), self.num_objectives), dtype=float)
-        prev_best_F[Mode.EXPLORE] = initial_best.F
-        prev_best_F[Mode.EXPLOIT] = initial_best.F
+        initial_best = RankAndCrowding().do(self.problem, self.pop, n_survive=1)[0]
+        prev_best_explor = initial_best
+        prev_best_exploit = initial_best
 
         self.seq_time.fill(1)
 
         # apply both exploration and exploitation for 3 iterations
         for i in range(0, 3):
-            new_pop = [copy.deepcopy(current_pop)]
+            new_pop = [copy.deepcopy(self.pop)]
 
-            explor_pop = self.run_exploration(current_pop)
-            exploit_pop = self.run_exploitation(current_pop)
+            explor_pop = self.run_exploration(self.pop)
+            exploit_pop = self.run_exploitation(self.pop)
 
             new_pop.append(explor_pop)
             new_pop.append(exploit_pop)
 
-            male_puma_explor = RankAndCrowding().do(self.problem, explor_pop, n_survive=1)[0]
-            male_puma_exploit = RankAndCrowding().do(self.problem, exploit_pop, n_survive=1)[0]
+            # Choose a solution randomly from the best solutions
+            male_puma_explor = self.get_male_puma(explor_pop)
+            male_puma_exploit = self.get_male_puma(exploit_pop)
+
+            # male_puma_explor = RankAndCrowding().do(self.problem, explor_pop, n_survive=1)[0]
+            # male_puma_exploit = RankAndCrowding().do(self.problem, exploit_pop, n_survive=1)[0]
 
             # Update pop (select best N solutions)
             new_pop = Population.merge(*new_pop)
             new_pop = RankAndCrowding().do(self.problem, new_pop, n_survive=self.pop_size)
 
             # update the best solution
-            self.male_puma = copy.deepcopy(new_pop[0])
+            self.male_puma = self.get_male_puma(new_pop)
 
             # update history (for scores computation)
-            self.update_seq_cost_lc(prev_best_F[Mode.EXPLORE], male_puma_explor.F, Mode.EXPLORE, i)
-            self.update_seq_cost_lc(prev_best_F[Mode.EXPLOIT], male_puma_exploit.F, Mode.EXPLOIT, i)
+            self.update_seq_cost_lc(prev_best_explor, male_puma_explor, Mode.EXPLORE, i)
+            self.update_seq_cost_lc(prev_best_exploit, male_puma_exploit, Mode.EXPLOIT, i)
 
             # Update prev_best_F
-            prev_best_F[Mode.EXPLORE] = male_puma_explor.F
-            prev_best_F[Mode.EXPLOIT] = male_puma_exploit.F
+            prev_best_explor = male_puma_explor
+            prev_best_exploit = male_puma_exploit
+
+            self.pop = new_pop
 
         # update exploration score and exploitation score
         self.update_scores_unexperienced()
@@ -299,10 +377,10 @@ class PumaOptimizer(Algorithm):
             new_pop = self.run_exploitation(self.pop)
             mode = Mode.EXPLOIT
 
-        male_puma = copy.deepcopy(RankAndCrowding().do(self.problem, new_pop, n_survive=1)[0])
+        male_puma = self.get_male_puma(new_pop)
 
         # update history (for scores computation) (except num_unselected_iters)
-        self.update_seq_cost_lc(self.male_puma.F, male_puma.F, mode)
+        self.update_seq_cost_lc(self.male_puma, male_puma, mode, pop=new_pop)
 
         # update the best solution
         if dominates(male_puma.F, self.male_puma.F):
@@ -321,22 +399,21 @@ class PumaOptimizer(Algorithm):
 
         return new_pop
 
-    def update_seq_cost_lc(self, prev_best_F, current_best_F, mode: Mode, idx=-1):
+    def update_seq_cost_lc(self, prev_best, current_best, mode: Mode, idx=-1, pop=None):
         """Update the seq_cost and lc values for given mode (explor/exploit).
 
         Args:
-            prev_best_F (np.ndarray): Previous best solution's objectives.
-            current_best_F (np.ndarray): Current best solution's objectives.
+            prev_best (Individual): Previous best solution.
+            current_best (Individual): Current best solution.
             mode (Mode): Mode of the algorithm (EXPLORE or EXPLOIT).
             idx (int): Index of the sequence of costs. Defaults to -1 (considered full, so we shift values.
+            pop (Population): Population to consider. Defaults to None (i.e. use self.pop for distance computation).
         """
-        # TODO: We can try to use either the rank or the objectives as they are for the cost
-
         if idx == -1:
             # considered full (so we shift)
             self.seq_cost[mode] = np.roll(self.seq_cost[mode], -1, axis=0)
 
-        self.seq_cost[mode, idx] = np.linalg.norm(prev_best_F - current_best_F, ord=1)
+        self.seq_cost[mode, idx] = self.compute_distance_cost(prev_best, current_best, pop)
 
         if self.seq_cost[mode, idx] != 0 and (self.lc is None or self.seq_cost[mode, idx] < self.lc):
             self.lc = self.seq_cost[mode, idx]
@@ -370,6 +447,7 @@ class PumaOptimizer(Algorithm):
 
         pf1_squared = self.pf1**2
         pf2_squared = self.pf2**2
+
         self.exploration_score = pf1_squared * f1[Mode.EXPLORE] + pf2_squared * f2[Mode.EXPLORE]
         self.exploitation_score = pf1_squared * f1[Mode.EXPLOIT] + pf2_squared * f2[Mode.EXPLOIT]
 
@@ -432,15 +510,18 @@ class PumaOptimizer(Algorithm):
                 # create a solution between pumas
                 g = np.random.rand() * 2 - 1  # in [-1,1]
 
-                a, b, c, d, e, f = np.random.choice(len(new_pop), 6, replace=False)
+                # a, b, c, d, e, f = np.random.choice(len(new_pop), 6, replace=False)
+                a, b, e, f = np.random.choice(len(new_pop), 4, replace=False)
                 vec_ba = new_pop[a].X - new_pop[b].X
-                vec_dc = new_pop[c].X - new_pop[d].X
+                # vec_dc = new_pop[c].X - new_pop[d].X
                 vec_fe = new_pop[e].X - new_pop[f].X
 
                 zi = xi.copy()
 
-                # TODO: remove vec_dc here, it was just kept for now to have the same formula has the paper
-                zi.X = new_pop[a].X + g * (vec_ba + vec_ba - vec_dc + vec_dc - vec_fe)
+                # paper's formula is the following one (commented), but vec_dc cancels out, so we simplify it
+                # zi.X = new_pop[a].X + g * (vec_ba + vec_ba - vec_dc + vec_dc - vec_fe)
+
+                zi.X = new_pop[a].X + g * (2 * vec_ba - vec_fe)
 
                 # repair the solution
                 if self.use_soft_repair:
@@ -529,16 +610,3 @@ class PumaOptimizer(Algorithm):
                 new_pop[i] = zi
 
         return new_pop
-
-    # def _update_archive(self, pop):
-    #     # Merge the archive and current population
-    #     merged = Population.merge(self.archive, pop)
-    #
-    #     num_selected = self.archive_size if self.archive_size is not None else len(merged)
-    #     new_archive = RankAndCrowding().do(self.problem, merged, n_survive=num_selected)
-    #
-    #     # Remove dominated solutions
-    #     nds_indices = np.unique(new_archive.get("rank"), return_index=True)[1]
-    #     new_archive = new_archive[nds_indices]
-    #
-    #     self.archive = new_archive
