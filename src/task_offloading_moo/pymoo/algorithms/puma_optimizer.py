@@ -13,6 +13,7 @@ from pymoo.operators.sampling.lhs import LHS
 from pymoo.termination import get_termination
 from pymoo.util.display.column import Column
 from enum import Enum
+from task_offloading_moo.utils.utils import dominates
 
 
 class Mode(int, Enum):
@@ -304,7 +305,7 @@ class PumaOptimizer(Algorithm):
         self.update_seq_cost_lc(self.male_puma.F, male_puma.F, mode)
 
         # update the best solution
-        if PumaOptimizer._dominates(male_puma.F, self.male_puma.F):
+        if dominates(male_puma.F, self.male_puma.F):
             self.male_puma = male_puma
 
         # update exploration score and exploitation score
@@ -403,24 +404,6 @@ class PumaOptimizer(Algorithm):
             self.alpha_exploit * (f1[Mode.EXPLOIT] + f2[Mode.EXPLOIT]) + delta_exploit * self.lc * self.f3[Mode.EXPLOIT]
         )
 
-    @staticmethod
-    def _dominates(x, z):
-        """Check if x dominates z.
-
-        TODO: (Suggestion) Move this method to a utility class in another file.
-
-        Args:
-            x (np.ndarray): First solution.
-            z (np.ndarray): Second solution.
-
-        Returns:
-            bool: Whether x dominates z or not.
-        """
-        no_worse = all(x_i <= z_i for x_i, z_i in zip(x, z))
-        strictly_better = any(x_i < z_i for x_i, z_i in zip(x, z))
-
-        return no_worse and strictly_better
-
     def run_exploration(self, current_pop):
         """Run the exploration phase to generate the next population.
 
@@ -477,7 +460,7 @@ class PumaOptimizer(Algorithm):
             zi.F = self.problem.evaluate([zi.X])[0]
 
             # update u probability
-            if PumaOptimizer._dominates(zi.F, xi.F):
+            if dominates(zi.F, xi.F):
                 new_pop[i] = zi
             else:
                 u += p
@@ -500,7 +483,7 @@ class PumaOptimizer(Algorithm):
             xi = new_pop[i]
             if np.random.rand() < 0.5:
                 # Ambush strategy
-                if np.random.rand() < self.l_prob:
+                if np.random.rand() > self.l_prob:
                     # Small jump towards 2 other pumas
                     random_puma_x = self.initialization.do(self.problem, 1, algorithm=self)[0].X
                     random_puma_scaled_x = random_puma_x * 2 * np.random.rand() * np.exp(np.random.randn(dim))
@@ -513,7 +496,7 @@ class PumaOptimizer(Algorithm):
                     denominator = 2 * np.random.rand() - 1 + np.random.randn(dim)
 
                     r = 2 * np.random.rand() - 1
-                    f1 = np.random.randn(dim) * np.exp(2 - (self.current_iter / self.n_max_iters))
+                    f1 = np.random.randn(dim) * np.exp(2 - 2 * (self.current_iter / self.n_max_iters))
                     w = np.random.randn(dim)
                     v = np.random.randn(dim)
                     f2 = w * (v**2) * np.cos(2 * np.random.rand() * w)
@@ -542,7 +525,7 @@ class PumaOptimizer(Algorithm):
             # evaluate the new solutions
             zi.F = self.problem.evaluate([zi.X])[0]
 
-            if PumaOptimizer._dominates(zi.F, xi.F):
+            if dominates(zi.F, xi.F):
                 new_pop[i] = zi
 
         return new_pop

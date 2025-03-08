@@ -1,14 +1,9 @@
 """Module that runs MOFDA algorithm, all variables are defined here."""
 
-import sys
-from pathlib import Path
-
-project_root = Path(__file__).resolve().parents[1]
-sys.path.append(str(project_root))
-from src.task_offloading_moo.pymoo.algorithms.mofda_optimizer import MOFDAOptimizer  # noqa: E402
-from src.task_offloading_moo.pymoo.operators.repair import TaskOffloadingRepair  # noqa: E402
-from src.task_offloading_moo.pymoo.operators.sampling import TaskOffloadingSampling  # noqa: E402
-from src.task_offloading_moo.pymoo.problem import TaskOffloadingProblem  # noqa: E402
+from task_offloading_moo.pymoo.algorithms.mofda_optimizer import MOFDAOptimizer  # noqa: E402
+from task_offloading_moo.pymoo.operators.repair import TaskOffloadingRepair  # noqa: E402
+from task_offloading_moo.pymoo.operators.sampling import TaskOffloadingSampling  # noqa: E402
+from task_offloading_moo.pymoo.problem import TaskOffloadingProblem  # noqa: E402
 from task_offloading_moo.pymoo.termination.mofda_termination import MOFDATermination  # noqa: E402
 from pymoo.optimize import minimize  # noqa: E402
 from pymoo.visualization.scatter import Scatter  # noqa: E402

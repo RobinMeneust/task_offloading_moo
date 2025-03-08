@@ -15,6 +15,8 @@ from task_offloading_moo.pymoo.operators.repair import TaskOffloadingRepair
 from task_offloading_moo.pymoo.operators.sampling import TaskOffloadingSampling
 from pymoo.optimize import minimize
 from pymoo.visualization.scatter import Scatter
+from task_offloading_moo.utils.utils import dominates
+
 
 # For newer pymoo versions use:
 """
@@ -204,7 +206,7 @@ class MOFDAOptimizer(Algorithm):
             best_neighbor_idx = 0
 
             for j in range(self.beta):
-                if self._dominates(F_neighbors[j], F_current):
+                if dominates(F_neighbors[j], F_current):
                     dominated = True
                     best_neighbor_idx = j
                     break
@@ -229,7 +231,7 @@ class MOFDAOptimizer(Algorithm):
                 random_flow = self.pop[random_idx]
 
                 # Compare fitness
-                if self._dominates(random_flow.get("F"), F_current):
+                if dominates(random_flow.get("F"), F_current):
                     # Move towards the random flow
                     new_X = flow_X + np.random.random() * (random_flow.get("X") - flow_X)
                 elif leader_X is not None:
@@ -250,10 +252,6 @@ class MOFDAOptimizer(Algorithm):
             offsprings = self.repair.do(self.problem, Population(offsprings), use_soft=self.use_soft_repair)
 
         return offsprings
-
-    def _dominates(self, F1, F2):
-        """Check if F1 dominates F2 (assuming minimization)."""
-        return np.all(F1 <= F2) and np.any(F1 < F2)
 
     def _advance(self, infills=None, **kwargs):
         # Update archive with evaluated offspring
