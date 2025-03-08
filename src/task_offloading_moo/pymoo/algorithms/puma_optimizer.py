@@ -12,6 +12,14 @@ from pymoo.core.repair import NoRepair
 from pymoo.operators.sampling.lhs import LHS
 from pymoo.termination import get_termination
 from pymoo.util.display.column import Column
+from enum import Enum
+
+
+class Mode(Enum, int):
+    """Mode of the PUMA algorithm (exploration or exploitation)."""
+
+    EXPLORE = 0
+    EXPLOIT = 1
 
 
 class PumaOutput(MultiObjectiveOutput):
@@ -67,14 +75,13 @@ class PumaOptimizer(Algorithm):
         alpha (float): The higher it is, the smaller the new puma components will be in the run strategy in
             exploitation phase, and thus the higher is the perturbation.
         num_objectives (int): Number of objectives.
-        best_four_pumas_scores_history_explor (np.ndarray): Best four pumas scores history in exploration phase.
-        num_unselected_iters_between_best_four_explor (np.ndarray): Number of unselected iterations
-            between best four in exploration phase.
-        best_four_pumas_scores_history_exploit (np.ndarray): Best four pumas scores history in exploitation phase.
-        num_unselected_iters_between_best_four_exploit (np.ndarray): Number of unselected iterations
-            between best four in exploitation phase.
-        f3_explor (float): F3 score in exploration phase.
-        f3_exploit (float): F3 score in exploitation phase.
+        seq_cost (np.ndarray): Sequence of costs, i.e. distances between the male puma (i.e. best)
+            across all runs and the current male puma.
+        seq_time (np.ndarray): Sequence of times, i.e. number of iterations between modes changes for each mode.
+        modes_num_unselected_iters (np.ndarray): Number of iterations for each mode
+            since last selection (i.e. last mode change).
+        f3 (np.ndarray): F3 score for each mode.
+        prev_mode (Mode): Mode in previous iteration.
         alpha_explor (float): Alpha in exploration phase.
         alpha_exploit (float): Alpha in exploitation phase.
         lc (float): LC value.
@@ -156,13 +163,11 @@ class PumaOptimizer(Algorithm):
         self.alpha = alpha
         self.num_objectives = num_objectives
 
-        self.best_four_pumas_scores_history_explor = np.empty((4, self.num_objectives), dtype=float)
-        self.num_unselected_iters_between_best_four_explor = np.empty(3, dtype=int)
-        self.best_four_pumas_scores_history_exploit = np.empty((4, self.num_objectives), dtype=float)
-        self.num_unselected_iters_between_best_four_exploit = np.empty(3, dtype=int)
+        self.seq_cost = np.empty((len(Mode), 3, self.num_objectives), dtype=float)
+        self.seq_time = np.empty((len(Mode), 3), dtype=float)
+        self.modes_num_unselected_iters = np.empty(len(Mode), dtype=int)
 
-        self.f3_explor = 0
-        self.f3_exploit = 0
+        self.f3 = np.zeros(len(Mode), dtype=float)
 
         self.alpha_explor = 0.99
         self.alpha_exploit = 0.99
@@ -171,6 +176,8 @@ class PumaOptimizer(Algorithm):
 
         self.archive_size = archive_size
         self._use_archive = use_archive
+
+        self.prev_mode = Mode.EXPLORE
 
     def _setup(self, problem, **kwargs):
         """Set up the algorithm.
@@ -193,7 +200,7 @@ class PumaOptimizer(Algorithm):
 
     def _initialize_advance(self, infills=None, **kwargs):
         """Do what is necessary after the initialization."""
-        self.male_puma = RankAndCrowding().do(self.problem, infills, n_survive=1)[0]
+        self.male_puma = copy.deepcopy(RankAndCrowding().do(self.problem, infills, n_survive=1)[0])
         # if self._use_archive:
         #     self._update_archive(init_pop)
 
@@ -230,33 +237,20 @@ class PumaOptimizer(Algorithm):
             Population: Next population.
         """
         current_pop = self.pop
-        new_pop = [copy.deepcopy(current_pop)]
 
-        initial_best = RankAndCrowding().do(self.problem, current_pop, n_survive=1)[0].data["rank"]
+        initial_best = copy.deepcopy(RankAndCrowding().do(self.problem, current_pop, n_survive=1)[0])
+        prev_best_F = np.empty((len(Mode), self.num_objectives), dtype=float)
+        prev_best_F[Mode.EXPLORE] = initial_best.F
+        prev_best_F[Mode.EXPLOIT] = initial_best.F
 
-        for i in range(3):
-            self.num_unselected_iters_between_best_four_explor[i] = 1
-            self.num_unselected_iters_between_best_four_exploit[i] = 1
-
-        self.best_four_pumas_scores_history_explor[0] = initial_best
-        self.best_four_pumas_scores_history_exploit[0] = initial_best
+        self.seq_time.fill(1)
 
         # apply both exploration and exploitation for 3 iterations
         for i in range(1, 4):
+            new_pop = [copy.deepcopy(current_pop)]
+
             explor_pop = self.run_exploration(current_pop)
             exploit_pop = self.run_exploitation(current_pop)
-
-            # print("\n\n############\n\n")
-            #
-            # for x in explor_pop:
-            #     print(x.X)
-            #
-            # print("\n####\n")
-            #
-            # for x in exploit_pop:
-            #     print(x.X)
-
-            # raise Exception("Stop here")
 
             new_pop.append(explor_pop)
             new_pop.append(exploit_pop)
@@ -264,24 +258,30 @@ class PumaOptimizer(Algorithm):
             male_puma_explor = RankAndCrowding().do(self.problem, explor_pop, n_survive=1)[0]
             male_puma_exploit = RankAndCrowding().do(self.problem, exploit_pop, n_survive=1)[0]
 
+            # Update pop (select best N solutions)
+            new_pop = Population.merge(*new_pop)
+            new_pop = RankAndCrowding().do(self.problem, new_pop, n_survive=self.pop_size)
+
             # update the best solution
-            if PumaOptimizer._dominates(male_puma_explor.F, self.male_puma.F):
-                self.male_puma = male_puma_explor
-            if PumaOptimizer._dominates(male_puma_exploit.F, self.male_puma.F):
-                self.male_puma = male_puma_exploit
+            self.male_puma = copy.deepcopy(new_pop[0])
 
             # update history (for scores computation)
-            self.best_four_pumas_scores_history_explor[i] = male_puma_explor.F
-            self.best_four_pumas_scores_history_exploit[i] = male_puma_exploit.F
+            self.update_seq_cost_lc(prev_best_F[Mode.EXPLORE], male_puma_explor.F, Mode.EXPLORE, i)
+            self.update_seq_cost_lc(prev_best_F[Mode.EXPLOIT], male_puma_exploit.F, Mode.EXPLOIT, i)
 
-        new_pop = Population.merge(*new_pop)
-
-        # select best N solutions
-        new_pop = RankAndCrowding().do(self.problem, new_pop, n_survive=self.pop_size)
+            # Update prev_best_F
+            prev_best_F[Mode.EXPLORE] = male_puma_explor.F
+            prev_best_F[Mode.EXPLOIT] = male_puma_exploit.F
 
         # update exploration score and exploitation score
         self.update_scores_unexperienced()
         return new_pop
+
+    def update_seq_time(self):
+        """Update the sequence of times for each mode. That is, the number of iterations since the last mode change."""
+        self.seq_time = np.roll(self.seq_time, -1, axis=1)  # shift
+        self.seq_time[Mode.EXPLORE, -1] = self.modes_num_unselected_iters[Mode.EXPLORE]
+        self.seq_time[Mode.EXPLOIT, -1] = self.modes_num_unselected_iters[Mode.EXPLOIT]
 
     def experience_phase(self):
         """Run the experienced phase to generate the next population.
@@ -289,125 +289,99 @@ class PumaOptimizer(Algorithm):
         Returns:
             Population: Next population.
         """
-        is_explor = False
         new_pop = None
 
         if self.exploration_score > self.exploitation_score:
-            is_explor = True
             new_pop = self.run_exploration(self.pop)
-            male_puma = RankAndCrowding().do(self.problem, new_pop, n_survive=1)[0]
-
-            if PumaOptimizer._dominates(male_puma.F, self.male_puma.F):
-                # TODO: Use domination ?
-                self.male_puma = male_puma
-
-            # update history
-            self.num_unselected_iters_between_best_four_explor = np.roll(
-                self.num_unselected_iters_between_best_four_explor, -1
-            )
-            self.num_unselected_iters_between_best_four_explor[-1] = 1
-
-            self.num_unselected_iters_between_best_four_exploit[-1] += 1
-
-            self.best_four_pumas_scores_history_explor = np.roll(self.best_four_pumas_scores_history_explor, -1, axis=0)
-            self.best_four_pumas_scores_history_explor[-1] = self.male_puma.F
+            mode = Mode.EXPLORE
         else:
             new_pop = self.run_exploitation(self.pop)
-            male_puma = RankAndCrowding().do(self.problem, new_pop, n_survive=1)[0]
+            mode = Mode.EXPLOIT
 
-            if PumaOptimizer._dominates(male_puma.F, self.male_puma.F):
-                # TODO: Use domination ?
-                self.male_puma = male_puma
+        male_puma = copy.deepcopy(RankAndCrowding().do(self.problem, new_pop, n_survive=1)[0])
 
-            # update history
-            self.num_unselected_iters_between_best_four_exploit = np.roll(
-                self.num_unselected_iters_between_best_four_exploit, -1
-            )
-            self.num_unselected_iters_between_best_four_exploit[-1] = 1
+        # update history (for scores computation) (except num_unselected_iters)
+        self.update_seq_cost_lc(self.male_puma.F, male_puma.F, mode)
 
-            self.num_unselected_iters_between_best_four_explor[-1] += 1
-
-            self.best_four_pumas_scores_history_exploit = np.roll(
-                self.best_four_pumas_scores_history_exploit, -1, axis=0
-            )
-            self.best_four_pumas_scores_history_exploit[-1] = self.male_puma.F
+        # update the best solution
+        if PumaOptimizer._dominates(male_puma.F, self.male_puma.F):
+            self.male_puma = male_puma
 
         # update exploration score and exploitation score
-        self.update_scores_experienced(is_explor)
+        self.update_scores_experienced()
+
+        # update seq_time (if mode change) and modes_num_unselected_iters (must be updated after seq_time)
+        if self.prev_mode != mode:
+            self.prev_mode = mode
+            self.update_seq_time()
+
+        self.modes_num_unselected_iters[mode] = 1
+        self.modes_num_unselected_iters[1 - mode] += 1
 
         return new_pop
 
-    def update_scores_unexperienced(self):
-        """Update the exploration and exploitation scores in the unexperienced phase."""
+    def update_seq_cost_lc(self, prev_best_F, current_best_F, mode: Mode, idx=-1):
+        """Update the seq_cost and lc values for given mode (explor/exploit).
+
+        Args:
+            prev_best_F (np.ndarray): Previous best solution's objectives.
+            current_best_F (np.ndarray): Current best solution's objectives.
+            mode (Mode): Mode of the algorithm (EXPLORE or EXPLOIT).
+            idx (int): Index of the sequence of costs. Defaults to -1 (considered full, so we shift values.
+        """
         # TODO: We can try to use either the rank or the objectives as they are for the cost
-        seq_cost_explor = np.empty((3, self.num_objectives))
-        seq_cost_exploit = np.empty((3, self.num_objectives))
+
+        if idx == -1:
+            # considered full (so we shift)
+            self.seq_cost[mode] = np.roll(self.seq_cost[mode], -1, axis=0)
+
+        self.seq_cost[mode, idx] = np.linalg.norm(prev_best_F - current_best_F, ord=1)
+
+        if self.seq_cost[mode, idx] != 0 and (self.lc is None or self.seq_cost[mode, idx] < self.lc):
+            self.lc = self.seq_cost[mode, idx]
+
+    def compute_escalation_score(self):
+        """Compute the escalation score (f1)."""
+        return self.seq_cost[:, 0] / self.seq_time[:, -1]
+
+    def compute_resonance_score(self):
+        """Compute the resonance score (f2)."""
+        return np.sum(self.seq_cost, axis=1) / np.sum(self.seq_time, axis=1)
+
+    def update_diversity_score(self, is_explor):
+        """Compute the diversity score (f3)."""
+        is_explor = self.exploration_score > self.exploitation_score
+
+        if is_explor:
+            self.f3[Mode.EXPLORE] = 0
+            self.f3[Mode.EXPLOIT] += self.pf3
+        else:
+            self.f3[Mode.EXPLOIT] = 0
+            self.f3[Mode.EXPLORE] += self.pf3
+
+    def update_scores_unexperienced(self):
+        """Update the exploration and exploitation scores for the unexperienced phase."""
+        # f1 (escalation)
+        f1 = self.compute_escalation_score()
+
+        # f2 (resonance)
+        f2 = self.compute_resonance_score()
 
         pf1_squared = self.pf1**2
         pf2_squared = self.pf2**2
+        self.exploration_score = pf1_squared * f1[Mode.EXPLORE] + pf2_squared * f2[Mode.EXPLORE]
+        self.exploitation_score = pf1_squared * f1[Mode.EXPLOIT] + pf2_squared * f2[Mode.EXPLOIT]
 
-        for i in range(len(seq_cost_explor)):
-            seq_cost_explor[i] = np.linalg.norm(
-                self.best_four_pumas_scores_history_explor[i] - self.best_four_pumas_scores_history_explor[i + 1], ord=1
-            )
-            seq_cost_exploit[i] = np.linalg.norm(
-                self.best_four_pumas_scores_history_exploit[i] - self.best_four_pumas_scores_history_exploit[i + 1],
-                ord=1,
-            )
-
-            # TODO: maybe try to use ranks instead of objectives norm
-            seq_cost_explor_norm = np.linalg.norm(seq_cost_explor[i], ord=1)
-            seq_cost_exploit_norm = np.linalg.norm(seq_cost_exploit[i], ord=1)
-
-            if seq_cost_explor_norm != 0 and (self.lc is None or seq_cost_explor_norm < self.lc):
-                self.lc = seq_cost_explor_norm
-            if seq_cost_explor_norm != 0 and (self.lc is None or seq_cost_exploit_norm < self.lc):
-                self.lc = seq_cost_exploit_norm
-
-        f1_explor = np.linalg.norm(seq_cost_explor[0], ord=1)
-        f1_exploit = np.linalg.norm(seq_cost_exploit[0], ord=1)
-
-        f2_explor = np.sum(seq_cost_explor)
-        f2_exploit = np.sum(seq_cost_exploit)
-
-        self.exploration_score = pf1_squared * f1_explor + pf2_squared * f2_explor
-        self.exploitation_score = pf1_squared * f1_exploit + pf2_squared * f2_exploit
-
-    def update_scores_experienced(self, is_explor):
-        """Update the exploration and exploitation scores in the experienced phase.
-
-        Args:
-            is_explor (bool): Whether the algorithm is exploring or exploiting.
-        """
-        # update history
-        # TODO: Seq computation for unexperienced and experienced phases should be merged and optimized
-        #  (replace best_four_pumas_scores_history_explor)
-        seq_cost_explor = np.empty(3)
-        seq_cost_exploit = np.empty(3)
-        for i in range(len(seq_cost_explor)):
-            seq_cost_explor[i] = np.linalg.norm(
-                self.best_four_pumas_scores_history_explor[i] - self.best_four_pumas_scores_history_explor[i + 1], ord=1
-            )
-            seq_cost_exploit[i] = np.linalg.norm(
-                self.best_four_pumas_scores_history_exploit[i] - self.best_four_pumas_scores_history_exploit[i + 1],
-                ord=1,
-            )
-
+    def update_scores_experienced(self):
+        """Update the exploration and exploitation scores for the experienced phase."""
         # f1 (escalation)
-        f1_explor = seq_cost_explor[-1] / self.num_unselected_iters_between_best_four_explor[-1]
-        f1_exploit = seq_cost_exploit[-1] / self.num_unselected_iters_between_best_four_exploit[-1]
+        f1 = self.compute_escalation_score()
 
         # f2 (resonance)
-        f2_explor = np.sum(seq_cost_explor) / np.sum(self.num_unselected_iters_between_best_four_explor)
-        f2_exploit = np.sum(seq_cost_exploit) / np.sum(self.num_unselected_iters_between_best_four_exploit)
+        f2 = self.compute_resonance_score()
 
         # f3 (diversity)
-        if is_explor:
-            self.f3_explor = 0
-            self.f3_exploit += self.pf3
-        else:
-            self.f3_exploit = 0
-            self.f3_explor += self.pf3
+        self.update_diversity_score()
 
         # Update alphas
         if self.exploration_score < self.exploitation_score:
@@ -421,20 +395,12 @@ class PumaOptimizer(Algorithm):
         delta_explor = 1 - self.alpha_explor
         delta_exploit = 1 - self.alpha_exploit
 
-        # Update lc
-        if seq_cost_explor[-1] != 0 and (self.lc is None or seq_cost_explor[-1] < self.lc):
-            self.lc = seq_cost_explor[-1]
-        if seq_cost_exploit[-1] != 0 and (self.lc is None or seq_cost_exploit[-1] < self.lc):
-            self.lc = seq_cost_exploit[-1]
-
-        # TODO: maybe try to use ranks instead of objectives norm
-        # seq_cost_explor_norm = np.linalg.norm(seq_cost_explor[-1], ord=1)
-        # seq_cost_exploit_norm = np.linalg.norm(seq_cost_exploit[-1], ord=1)
-
         # compute final scores
-        self.exploration_score = self.alpha_explor * (f1_explor + f2_explor) + delta_explor * self.lc * self.f3_explor
+        self.exploration_score = (
+            self.alpha_explor * (f1[Mode.EXPLORE] + f2[Mode.EXPLORE]) + delta_explor * self.lc * self.f3[Mode.EXPLORE]
+        )
         self.exploitation_score = (
-            self.alpha_exploit * (f1_exploit + f2_exploit) + delta_exploit * self.lc * self.f3_exploit
+            self.alpha_exploit * (f1[Mode.EXPLOIT] + f2[Mode.EXPLOIT]) + delta_exploit * self.lc * self.f3[Mode.EXPLOIT]
         )
 
     @staticmethod
