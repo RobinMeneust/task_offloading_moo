@@ -264,7 +264,7 @@ class MOFDAOptimizer(Algorithm):
 
         # Save algorithm state in history
         if self.save_history and self.current_iter % 1 == 0:
-            self.history.append(self.copy(deep=True))
+            self.history.append(self.copy(deep=False))
 
         self.current_iter += 1
 
