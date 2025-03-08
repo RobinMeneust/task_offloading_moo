@@ -8,7 +8,7 @@ from pymoo.core.population import Population  # noqa: E402
 from pymoo.util.display.multi import MultiObjectiveOutput
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting  # noqa: E402
 from pymoo.core.individual import Individual  # noqa: E402
-from src.task_offloading_moo.pymoo.algorithms.MOFDA_archive import MOFDAArchive  # noqa: E402
+from task_offloading_moo.pymoo.archive.mofda_archive import MOFDAArchive  # noqa: E402
 
 from task_offloading_moo.pymoo.problem import TaskOffloadingProblem
 from task_offloading_moo.pymoo.operators.repair import TaskOffloadingRepair
