@@ -107,6 +107,8 @@ class PumaOptimizer(Algorithm):
         num_objectives=2,
         archive_size=25,
         use_archive=True,
+        num_archive_injections=0,
+        archive_injections_prob=0.2,
         **kwargs
     ):
         """Initialize PUMA optimizer.
@@ -133,6 +135,8 @@ class PumaOptimizer(Algorithm):
             num_objectives (int): Number of objectives. Defaults to 2.
             archive_size (int): Size of the archive. If None, then no limit is set. Defaults to 25.
             use_archive (bool): Whether to use the archive or not. Defaults to True.
+            num_archive_injections (int): Number of archive injections. Defaults to 0.
+            archive_injections_prob (float): Probability of injecting solutions from the archive. Defaults to 0.2.
         """
         if n_max_iters < 3:
             raise ValueError("The number of generations must be at least 3.")
@@ -180,6 +184,9 @@ class PumaOptimizer(Algorithm):
 
         self.prev_mode = Mode.EXPLORE
 
+        self.num_archive_injections = num_archive_injections
+        self.archive_injections_prob = archive_injections_prob
+
     def _setup(self, problem, **kwargs):
         """Set up the algorithm.
 
@@ -218,8 +225,13 @@ class PumaOptimizer(Algorithm):
         else:
             next_pop = self.experience_phase()
             self.current_iter += 1
-        # if self._use_archive:
-        #     self._update_archive(next_pop)
+
+        if self._use_archive and self.num_archive_injections > 0 and np.random.rand() < self.archive_injections_prob:
+            num_injections = min(self.num_archive_injections, len(self.archive))
+            injections_indices = np.random.choice(range(len(self.archive)), num_injections, replace=False)
+            injections = self.archive[injections_indices]
+            next_pop = [next_pop, injections]
+            next_pop = Population.merge(*next_pop)
 
         return next_pop
 
