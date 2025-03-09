@@ -13,6 +13,7 @@ from task_offloading_moo.pymoo.archive.mofda_archive import MOFDAArchive  # noqa
 from task_offloading_moo.pymoo.problem import TaskOffloadingProblem
 from task_offloading_moo.pymoo.operators.repair import TaskOffloadingRepair
 from task_offloading_moo.pymoo.operators.sampling import TaskOffloadingSampling
+from task_offloading_moo.pymoo.termination.mofda_termination import MOFDATermination
 from pymoo.optimize import minimize
 from pymoo.visualization.scatter import Scatter
 from task_offloading_moo.utils.utils import dominates
@@ -333,7 +334,7 @@ class MOFDAOptimizer(Algorithm):
 if __name__ == "__main__":
     # Create the optimizer
     pop_size = 100
-    n_max_iters = 10
+    n_max_iters = 50
 
     num_cloud_machines = 30
     num_fog_machines = 20
@@ -357,10 +358,32 @@ if __name__ == "__main__":
     problem = TaskOffloadingProblem(num_cloud_machines, num_fog_machines, num_tasks)
 
     # Run the optimizer
-    res = minimize(problem, algorithm, seed=1, verbose=True)
+    res = minimize(problem, algorithm, seed=1, verbose=True, termination=MOFDATermination(n_max_gen=n_max_iters))
 
     # Create a scatter plot of the results
     plot = Scatter(title="MOFDA")
     plot.add(res.F)
     plot.axis_labels = problem.dataset_generator.get_objective_names()
     _ = plot.show()
+
+    # Profile
+    """
+    import cProfile
+    import pstats
+
+    def run_minimize(problem, algorithm, n_max_iters):
+        print("minimize")
+        return minimize(
+            problem,
+            algorithm,
+            termination=MOFDATermination(n_max_gen=n_max_iters),
+            seed=1,
+            verbose=True
+        )
+    print("profiler")
+    profiler = cProfile.Profile()
+    print("run")
+    profiler.runcall(run_minimize, problem, algorithm, n_max_iters)
+    print("stats")
+    stats = pstats.Stats(profiler)
+    stats.sort_stats(pstats.SortKey.TIME).print_stats()"""
