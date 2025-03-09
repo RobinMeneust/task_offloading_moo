@@ -5,7 +5,7 @@ import copy
 import numpy as np
 from pymoo.operators.survival.rank_and_crowding import RankAndCrowding
 from pymoo.core.initialization import Initialization
-from pymoo.core.population import Population
+from pymoo.core.population import Population, pop_from_array_or_individual
 from pymoo.core.algorithm import Algorithm
 from pymoo.util.display.multi import MultiObjectiveOutput
 from pymoo.core.repair import NoRepair
@@ -14,6 +14,10 @@ from pymoo.termination import get_termination
 from pymoo.util.display.column import Column
 from enum import Enum
 from task_offloading_moo.utils.utils import dominates
+from task_offloading_moo.pymoo.problem import TaskOffloadingProblem
+from task_offloading_moo.pymoo.operators.repair import TaskOffloadingRepair
+from task_offloading_moo.pymoo.operators.sampling import TaskOffloadingSampling
+from pymoo.optimize import minimize
 
 
 class Mode(int, Enum):
@@ -271,10 +275,10 @@ class PumaOptimizer(Algorithm):
 
         # check if ind1.X is in pop.get("X")
         if not np.any(np.all(pop.get("X") == ind1.X, axis=1)):
-            new_pop = Population.new("X", np.array([ind1.X]))
+            new_pop = pop_from_array_or_individual(ind1)
             pop = Population.merge(pop, new_pop)
         if not np.any(np.all(pop.get("X") == ind2.X, axis=1)):
-            new_pop = Population.new("X", np.array([ind2.X]))
+            new_pop = pop_from_array_or_individual(ind2)
             pop = Population.merge(pop, new_pop)
         pop = RankAndCrowding().do(self.problem, pop)
 
@@ -632,3 +636,32 @@ class PumaOptimizer(Algorithm):
                 new_pop[i] = zi
 
         return new_pop
+
+
+if __name__ == "__main__":
+    pop_size = 100
+    n_max_iters = 50
+
+    archive_size = int(0.4 * pop_size) + 1
+    num_archive_injections = int(pop_size * 0.3)
+    archive_injections_prob = 0.3
+
+    num_cloud_machines = 30
+    num_fog_machines = 20
+    num_tasks = 500
+
+    algorithm = PumaOptimizer(
+        repair=TaskOffloadingRepair(),
+        use_soft_repair=True,
+        pop_size=pop_size,
+        sampling=TaskOffloadingSampling(),
+        n_max_iters=n_max_iters,
+        archive_size=archive_size,
+        save_history=True,
+        num_archive_injections=num_archive_injections,
+        archive_injections_prob=archive_injections_prob,
+    )
+
+    problem = TaskOffloadingProblem(num_cloud_machines, num_fog_machines, num_tasks, use_random_machines=True)
+
+    res = minimize(problem, algorithm, seed=1, verbose=True)
