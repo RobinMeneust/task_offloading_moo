@@ -329,24 +329,6 @@ class MOFDAOptimizer(Algorithm):
 
         return crowding
 
-    def _set_optimum(self, **kwargs):
-        """Fix the optimum population to ensure it has valid X values."""
-        # Create a proper Population if needed
-        if len(self.archive.data) == 0:
-            # Handle empty archive case by using best from current population
-            self.opt = Population()
-            return
-
-        # Create Population from archive data
-        self.opt = Population.create(self.archive.data)
-
-        # Ensure X values are present and properly formatted
-        if self.opt.get("X") is None or self.opt.get("X").size == 0:
-            # Copy X values from the current population if missing
-            if len(self.pop) > 0 and self.pop.get("X") is not None:
-                n_vars = self.pop.get("X").shape[1]
-                self.opt.set("X", np.zeros((len(self.opt), n_vars)))
-
 
 if __name__ == "__main__":
     # Create the optimizer
