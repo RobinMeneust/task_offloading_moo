@@ -441,7 +441,7 @@ class PumaOptimizer(Algorithm):
 
         self.seq_cost[mode, idx] = self.compute_distance_cost(prev_best, current_best, pop)
 
-        if self.seq_cost[mode, idx] != 0 and (self.lc is None or self.seq_cost[mode, idx] < self.lc):
+        if self.lc is None or (self.seq_cost[mode, idx] != 0 and self.seq_cost[mode, idx] < self.lc):
             self.lc = self.seq_cost[mode, idx]
 
     def compute_escalation_score(self):
@@ -592,7 +592,8 @@ class PumaOptimizer(Algorithm):
                 # Ambush strategy
                 if np.random.rand() > self.l_prob:
                     # Small jump towards 2 other pumas
-                    random_puma_x = self.initialization.do(self.problem, 1, algorithm=self)[0].X
+                    random_puma_idx = np.random.choice(len(new_pop))
+                    random_puma_x = copy.deepcopy(new_pop[random_puma_idx].X)
                     random_puma_scaled_x = random_puma_x * 2 * np.random.rand() * np.exp(np.random.randn(dim))
 
                     zi = xi.copy()
@@ -616,12 +617,16 @@ class PumaOptimizer(Algorithm):
             else:
                 # Run strategy
                 mean_puma = np.mean(np.array([ind.X for ind in new_pop]), axis=0) / len(new_pop)
-                random_puma = self.initialization.do(self.problem, 1, algorithm=self)[0]
-                beta = np.random.randint(0, 2)  # 0 or 1
+                random_puma_idx = np.random.choice(len(new_pop))
+                random_puma_x = copy.deepcopy(new_pop[random_puma_idx].X)
+
+                beta_factor = np.random.randint(0, 2) * 2 - 1  # 0 or 1 -> -1 or 1
                 denominator = 1 + np.random.rand() * self.alpha  # scale
 
                 zi = xi.copy()
-                zi.X = (np.multiply(random_puma.X, mean_puma) - (1**beta) * xi.X) / denominator  # element wise product
+                zi.X = (
+                    np.multiply(random_puma_x, mean_puma) - beta_factor * xi.X
+                ) / denominator  # element wise product
 
             # repair the solution
             if self.use_soft_repair:
