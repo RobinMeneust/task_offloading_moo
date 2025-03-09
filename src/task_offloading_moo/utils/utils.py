@@ -35,7 +35,6 @@ def save_generations_video_pymoo(history, out_path, file_name_without_extension)
     out_file_path = os.path.join(out_path, file_name_without_extension + ".mp4")
 
     with Recorder(Video(out_file_path)) as rec:
-
         # for each algorithm object in the history
         for entry in history:
             sc = Scatter(title=("Gen %s" % entry.n_gen))

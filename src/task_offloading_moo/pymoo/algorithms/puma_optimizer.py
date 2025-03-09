@@ -227,11 +227,16 @@ class PumaOptimizer(Algorithm):
             self.current_iter += 1
 
         if self._use_archive and self.num_archive_injections > 0 and np.random.rand() < self.archive_injections_prob:
+            # clip next_pop to pop_size - num_injections
             num_injections = min(self.num_archive_injections, len(self.archive))
-            injections_indices = np.random.choice(range(len(self.archive)), num_injections, replace=False)
-            injections = self.archive[injections_indices]
-            next_pop = [next_pop, injections]
-            next_pop = Population.merge(*next_pop)
+            if num_injections > 0:
+                next_pop = RankAndCrowding().do(self.problem, next_pop, n_survive=self.pop_size - num_injections)
+
+                injections_indices = np.random.choice(range(len(self.archive)), num_injections, replace=False)
+                injections = self.archive[injections_indices]
+
+                next_pop = [next_pop, injections]
+                next_pop = Population.merge(*next_pop)
 
         return next_pop
 
@@ -278,7 +283,12 @@ class PumaOptimizer(Algorithm):
         ind2 = pop[np.all(pop.get("X") == ind2.X, axis=1)][0]
 
         rank_diff = np.abs(ind1.data["rank"] - ind2.data["rank"])
-        crowding_diff = np.abs(ind1.data["crowding"] - ind2.data["crowding"])
+
+        if np.isinf(ind1.data["crowding"]) and np.isinf(ind2.data["crowding"]):
+            # undetermined case
+            crowding_diff = 0
+        else:
+            crowding_diff = np.abs(ind1.data["crowding"] - ind2.data["crowding"])
 
         if np.isnan(crowding_diff):
             crowding_diff = 0

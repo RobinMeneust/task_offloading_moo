@@ -53,7 +53,7 @@ class MOFDAOptimizer(Algorithm):
         beta=4,  # number of neighbors around each flow
         delta=0.5,  # mutation rate
         use_soft_repair=True,
-        save_history=False,
+        # save_history=False,
         **kwargs,
     ):
         """Initialize the MOFDA algorithm with the given parameters."""
@@ -70,13 +70,12 @@ class MOFDAOptimizer(Algorithm):
         self.beta = beta
         self.delta = delta
         self.use_soft_repair = use_soft_repair
-        self.save_history = save_history
+        # self.save_history = save_history
 
         # Create archive without parameters first
-        self.archive = MOFDAArchive(size=archive_size)
+        self.custom_archive = MOFDAArchive(size=archive_size)
         # Then set size attribute separately
-        self.archive.size = archive_size
-        self.current_iter = 0
+        self.custom_archive.size = archive_size
 
     def copy(self, deep=False):
         """Create a copy of the algorithm."""
@@ -103,7 +102,7 @@ class MOFDAOptimizer(Algorithm):
 
     def _initialize_advance(self, infills=None, **kwargs):
         # Add initial population to archive
-        self.archive.update(self.pop)
+        self.custom_archive.update(self.pop)
 
     def _repair_solution(self, X):
         """Ensure solutions contain valid integer machine assignments."""
@@ -141,7 +140,7 @@ class MOFDAOptimizer(Algorithm):
         n_vars = X.shape[1]
 
         # Get leader from archive (best non-dominated solution)
-        leader = self.archive.get_leader()
+        leader = self.custom_archive.get_leader()
         leader_X = leader.get("X") if leader is not None else None
 
         # For each individual in population
@@ -254,17 +253,18 @@ class MOFDAOptimizer(Algorithm):
         return offsprings
 
     def _advance(self, infills=None, **kwargs):
+        """Do what is necessary after the infill."""
         # Update archive with evaluated offspring
-        self.archive.update(infills)
+        self.custom_archive.update(infills)
 
         # Select next population from combined previous population and offspring
         self.pop = self._select(self.pop, infills)
 
         # Save algorithm state in history
-        if self.save_history and self.current_iter % 1 == 0:
-            self.history.append(self.copy(deep=False))
+        # if self.save_history and self.current_iter % 1 == 0:
+        #     self.history.append(self.copy(deep=False))
 
-        self.current_iter += 1
+        # self.current_iter += 1
 
     def _select(self, pop, off):
         # Combine parent and offspring population
