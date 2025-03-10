@@ -2,56 +2,26 @@
   "cloud":
     [
       {
-        "name": "c4.large_based",
-        "cpu_rate": 2900,
-        "vcpus": 2,
-        "cpu_usage_cost": 0.1190,
-        "ram_usage_cost": 5.55e-6,
+        "cpu_rate": 1600,
+        "cpu_usage_cost": 0.96,
+        "ram_usage_cost": 6.563e-5,
         "bandwidth_usage_cost": 0.05,
         "distance_edge": 1e6,
         "bandwidth": 10,
-        "ram_limit": 3.75
-      },
-      {
-        "name": "c4.xlarge_based",
-        "cpu_rate": 2900,
-        "cpu_usage_cost": 0.9500,
-        "vcpus": 16,
-        "ram_usage_cost": 5.55e-6,
-        "bandwidth_usage_cost": 0.05,
-        "distance_edge": 1e6,
-        "bandwidth": 10,
-        "ram_limit": 30.0
+        "ram_limit": 7.5
       }
     ]
   ,
   "fog":
     [
       {
-        "name": "t3.small_based",
-        "cpu_rate": 3100,
-        "vcpus": 2,
-        "ram_limit": 2,
-        "ram_usage_cost": 5.55e-6,
-        "cpu_usage_cost": 0.0236,
-        "inbound_bandwidth_usage_cost": 0.0,
+        "cpu_rate": 1300,
+        "cpu_usage_cost": 0.48,
+        "ram_usage_cost": 6.563e-5,
         "bandwidth_usage_cost": 0.05,
-        "outbound_bandwidth_usage_cost": 0.09,
-        "bandwidth": 5,
-        "distance_edge": 1e6
-      },
-      {
-        "name": "t3.xlarge_based",
-        "cpu_rate": 3100,
-        "vcpus": 4,
-        "ram_limit": 16,
-        "ram_usage_cost": 5.55e-6,
-        "cpu_usage_cost": 0.1888,
-        "inbound_bandwidth_usage_cost": 0.0,
-        "bandwidth_usage_cost": 0.05,
-        "outbound_bandwidth_usage_cost": 0.09,
-        "bandwidth": 5,
-        "distance_edge": 1e6
+        "distance_edge": 1e6,
+        "bandwidth": 10,
+        "ram_limit": 2
       }
     ]
 }

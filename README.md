@@ -38,6 +38,16 @@ Then, simply use the notebooks to learn how to use the package, and refer to the
 - bandwidth: GB/s
 - ram_limit: GB
 
+#### Alternative version: fixed machines list
+
+Instead of using random machines, we can also use predetermined ones.
+The values used are based on the paper: Kaya, SOUAÏBOU HAWAOU and Yassa, Sonia and Vivient Corneille, KAMLA and Laurent, BITJOKA and Olivier, ROMAIN, Multi-Objective Monarch Butterfly Optimization Algorithm for Agri-Food Workflow Scheduling in Fog-Cloud. Available at SSRN: https://ssrn.com/abstract=5143712 or http://dx.doi.org/10.2139/ssrn.5143712.
+
+For RAM usage cost, we used: https://cloud.google.com/compute/all-pricing?hl=en
+
+For ..., we used: Mokni, I., Yassa, S. A multi-objective approach for optimizing IoT applications offloading in fog–cloud environments with NSGA-II. J Supercomput 80, 27034–27072 (2024). https://doi.org/10.1007/s11227-024-06431-z
+
+
 ### Tasks
 
 - num_instructions: millions of instructions (1e6)
@@ -45,12 +55,6 @@ Then, simply use the notebooks to learn how to use the package, and refer to the
 - in_traffic: GB
 - out_traffic: GB
 
-
-### Assumptions and notations
-
-- IPC (instructions per cycle) is assumed to be 1, but it varies actually
-- CPS (cycles per second) is clock frequency
-- cpu_rate = IPS (instructions per second) is calculated as $IPC \times CPS = 2 CPS$ 
 
 ## Documentation
 
