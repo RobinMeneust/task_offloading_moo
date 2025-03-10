@@ -16,13 +16,15 @@
 - `uv pip install -r requirements.txt`
 - `uv pip install -e .`
 
-### Pre-commit
+### Pre-commit (optional)
 
-`pre-commit install`
+To enable checks before commits, use: `pre-commit install`
 
 ## Usage
 
-With conda use `conda activate moo_project` to activate the environment.
+With conda use `conda activate moo_project` to activate the environment. With uv, or any otheer virtual env, use the associated command or set your interpreter to the one inside the virtual env Scripts folder.
+
+Then, simply use the notebooks to learn how to use the package, and refer to the documentation if needed.
 
 ## Variables
 
@@ -49,8 +51,6 @@ With conda use `conda activate moo_project` to activate the environment.
 - IPC (instructions per cycle) is assumed to be 1, but it varies actually
 - CPS (cycles per second) is clock frequency
 - cpu_rate = IPS (instructions per second) is calculated as $IPC \times CPS = 2 CPS$ 
-
-
 
 ## Documentation
 
